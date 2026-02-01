@@ -22,7 +22,7 @@
 ![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers-f38020)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/chrisyue888/Cloudflare-Navihive)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zhumengstar/Cloudflare-Navihive)
 
 **一个优雅、现代化的网站导航管理系统**
 基于 Cloudflare Workers 构建 • 零成本部署 • 全球 CDN 加速 • 企业级安全
@@ -50,7 +50,7 @@
 
 1. **Fork 项目** → 点击右上角 Fork 按钮
 2. **新建 wrangler.jsonc 文件** 从 wrangler.template.jsonc 复制然后修改
-3. **一键部署** → [![Deploy](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/你的用户名/Cloudflare-Navihive)
+3. **一键部署** → [![Deploy](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zhumengstar/Cloudflare-Navihive)
 4. **配置数据库** → 按照[部署指南](https://zqq-nuli.github.io/Cloudflare-Navihive/deployment/)创建 D1 数据库
 
 > 详细步骤见[完整部署指南](https://zqq-nuli.github.io/Cloudflare-Navihive/deployment/)
