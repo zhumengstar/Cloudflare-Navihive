@@ -4,7 +4,7 @@
  */
 {
     "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "navihive",
+    "name": "mynav",
     "main": "worker/index.ts",
     "compatibility_date": "2025-04-05",
     "compatibility_flags": ["nodejs_compat"],  // 必须启用 Node.js 兼容
@@ -18,8 +18,8 @@
     "d1_databases": [
         {
             "binding": "DB",
-            "database_name": "navigation-db",
-            "database_id": "f9ff228d-61ff-4cb8-a820-62095c1a1dbc"
+            "database_name": "mynav",
+            "database_id": "2539afd9-931b-444b-8bc7-2e0816242ba8"
         }
     ],
     "vars": {
@@ -29,6 +29,7 @@
         "AUTH_SECRET": "$2y$10$IMVl9NM.Smo7xbPVyi9HEOBhcLxOPKEp9RBIEoijS4YbKjeyFjJFm"
     }
 }
+
 
 
 
