@@ -30,12 +30,18 @@ dist-ssr
 # wrangler files
 .wrangler
 .dev.vars*
+.devvars
 pnpm-lock.yaml
 npm-lock.yaml
 wrangler.jsonc
 开发调试.md
 UPDATE.md
 NEXT.md
+
+# 本地环境文件
+.env.local
+.dev/
+node_modules/.tmp/
 
 # VitePress 构建产物
 docs/.vitepress/cache
