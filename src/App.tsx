@@ -5,6 +5,7 @@ import { Site, Group } from './API/http';
 import { GroupWithSites } from './types';
 import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
+import SiteCard from './components/SiteCard';
 import LoginForm from './components/LoginForm';
 import SearchBox from './components/SearchBox';
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
@@ -542,7 +543,6 @@ function App() {
     if (!over) return;
 
     const activeId = active.id.toString();
-    const overId = over.id.toString();
 
     // 只处理站点拖拽
     if (!activeId.startsWith('site-')) return;

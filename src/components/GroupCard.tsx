@@ -225,7 +225,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
       return (
         <DroppableGroupContainer
           groupId={group.id}
-          isDraggingOver={isDraggingOverThisGroup}
+          isDraggingOver={isDraggingOverThisGroup ?? false}
         >
           <DndContext
             sensors={sensors}
