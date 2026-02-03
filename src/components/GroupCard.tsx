@@ -12,6 +12,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverEvent,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -37,6 +39,52 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
+// 可拖放的分组容器组件
+function DroppableGroupContainer({
+  children,
+  groupId,
+  isDraggingOver,
+}: {
+  children: React.ReactNode;
+  groupId: number;
+  isDraggingOver: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `group-${groupId}`,
+    data: {
+      groupId,
+    },
+  });
+
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        position: 'relative',
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          border: isDraggingOver || isOver ? '3px dashed' : 'none',
+          borderColor: 'primary.main',
+          borderRadius: 4,
+          pointerEvents: 'none',
+          zIndex: 1,
+        },
+        backgroundColor: isDraggingOver || isOver ? 'action.hover' : 'transparent',
+        borderRadius: 2,
+        transition: 'all 0.2s ease-in-out',
+        p: isDraggingOver || isOver ? 1 : 0,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
 // 更新组件属性接口
 interface GroupCardProps {
   group: GroupWithSites;
@@ -52,6 +100,8 @@ interface GroupCardProps {
   onUpdateGroup?: (group: Group) => void; // 更新分组的回调函数
   onDeleteGroup?: (groupId: number) => void; // 删除分组的回调函数
   configs?: Record<string, string>; // 传入配置
+  onSiteDragOver?: (event: DragOverEvent) => void; // 跨分组拖拽处理
+  draggedSiteId?: string | null; // 当前拖拽的站点ID
 }
 
 const GroupCard: React.FC<GroupCardProps> = ({
@@ -67,6 +117,8 @@ const GroupCard: React.FC<GroupCardProps> = ({
   onUpdateGroup,
   onDeleteGroup,
   configs,
+  onSiteDragOver,
+  draggedSiteId,
 }) => {
   // 添加本地状态来管理站点排序
   const [sites, setSites] = useState<Site[]>(group.sites);
@@ -154,6 +206,10 @@ const GroupCard: React.FC<GroupCardProps> = ({
   // 判断是否为当前正在编辑的分组
   const isCurrentEditingGroup = sortMode === 'SiteSort' && currentSortingGroupId === group.id;
 
+  // 判断是否有站点正在拖拽到此分组
+  const isDraggingOverThisGroup =
+    sortMode === 'SiteSort' && draggedSiteId && currentSortingGroupId !== group.id;
+
   // 渲染站点卡片区域
   const renderSites = () => {
     // 使用本地状态中的站点数据
@@ -167,53 +223,59 @@ const GroupCard: React.FC<GroupCardProps> = ({
     // 如果是编辑模式，使用DndContext包装
     if (isCurrentEditingGroup) {
       return (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleSiteDragEnd}
+        <DroppableGroupContainer
+          groupId={group.id}
+          isDraggingOver={isDraggingOverThisGroup}
         >
-          <SortableContext
-            items={sitesToRender.map((site) => `site-${site.id}`)}
-            strategy={horizontalListSortingStrategy}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleSiteDragEnd}
+            onDragOver={onSiteDragOver}
           >
-            <Box sx={{ width: '100%' }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  margin: -1, // 抵消内部padding，确保边缘对齐
-                }}
-              >
-                {sitesToRender.map((site, idx) => (
-                  <Box
-                    key={site.id || idx}
-                    sx={{
-                      width: {
-                        xs: '50%',
-                        sm: '50%',
-                        md: '25%',
-                        lg: '25%',
-                        xl: '25%',
-                      },
-                      padding: 1, // 内部间距，更均匀的分布
-                      boxSizing: 'border-box', // 确保padding不影响宽度计算
-                    }}
-                  >
-                    <SiteCard
-                      site={site}
-                      onUpdate={onUpdate}
-                      onDelete={onDelete}
-                      isEditMode={true}
-                      viewMode={viewMode}
-                      index={idx}
-                      iconApi={configs?.['site.iconApi']} // 传入iconApi配置
-                    />
-                  </Box>
-                ))}
+            <SortableContext
+              items={sitesToRender.map((site) => `site-${site.id}`)}
+              strategy={horizontalListSortingStrategy}
+            >
+              <Box sx={{ width: '100%' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    margin: -1, // 抵消内部padding，确保边缘对齐
+                  }}
+                >
+                  {sitesToRender.map((site, idx) => (
+                    <Box
+                      key={site.id || idx}
+                      sx={{
+                        width: {
+                          xs: '50%',
+                          sm: '50%',
+                          md: '25%',
+                          lg: '25%',
+                          xl: '25%',
+                        },
+                        padding: 1, // 内部间距，更均匀的分布
+                        boxSizing: 'border-box', // 确保padding不影响宽度计算
+                      }}
+                    >
+                      <SiteCard
+                        site={site}
+                        onUpdate={onUpdate}
+                        onDelete={onDelete}
+                        isEditMode={true}
+                        viewMode={viewMode}
+                        index={idx}
+                        iconApi={configs?.['site.iconApi']} // 传入iconApi配置
+                      />
+                    </Box>
+                  ))}
+                </Box>
               </Box>
-            </Box>
-          </SortableContext>
-        </DndContext>
+            </SortableContext>
+          </DndContext>
+        </DroppableGroupContainer>
       );
     }
 
