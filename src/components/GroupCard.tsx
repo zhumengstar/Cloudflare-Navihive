@@ -207,8 +207,8 @@ const GroupCard: React.FC<GroupCardProps> = ({
   const isCurrentEditingGroup = sortMode === 'SiteSort' && currentSortingGroupId === group.id;
 
   // 判断是否有站点正在拖拽到此分组
-  const isDraggingOverThisGroup =
-    sortMode === 'SiteSort' && draggedSiteId && currentSortingGroupId !== group.id;
+  const isDraggingOverThisGroup: boolean =
+    sortMode === 'SiteSort' && !!draggedSiteId && currentSortingGroupId !== group.id;
 
   // 渲染站点卡片区域
   const renderSites = () => {
@@ -225,7 +225,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
       return (
         <DroppableGroupContainer
           groupId={group.id}
-          isDraggingOver={isDraggingOverThisGroup ?? false}
+          isDraggingOver={isDraggingOverThisGroup}
         >
           <DndContext
             sensors={sensors}
