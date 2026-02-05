@@ -14,6 +14,7 @@ import {
   IconButton,
   Box,
   Fade,
+  Tooltip,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -185,16 +186,38 @@ const SiteCard = memo(function SiteCard({
                   {fallbackIcon}
                 </Box>
               )}
-              <Typography
-                variant='subtitle1'
-                fontWeight='medium'
-                noWrap
-                sx={{
-                  fontSize: { xs: '0.875rem', sm: '1rem' },
+              <Tooltip
+                title={site.name}
+                arrow
+                placement="top"
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      fontSize: '1rem',
+                      lineHeight: 1.5,
+                      p: 1
+                    }
+                  }
                 }}
               >
-                {site.name}
-              </Typography>
+                <Typography
+                  variant='subtitle2'
+                  fontWeight='medium'
+                  noWrap
+                  sx={{
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    transition: 'all 0.2s ease-in-out',
+                    cursor: 'default',
+                    '&:hover': {
+                      fontSize: { xs: '0.875rem', sm: '1rem' },
+                      fontWeight: 'bold',
+                      color: 'primary.main',
+                    }
+                  }}
+                >
+                  {site.name}
+                </Typography>
+              </Tooltip>
             </Box>
 
             {/* 描述 */}
@@ -274,16 +297,37 @@ const SiteCard = memo(function SiteCard({
                     {fallbackIcon}
                   </Box>
                 )}
-                <Typography
-                  variant='subtitle1'
-                  fontWeight='medium'
-                  noWrap
-                  sx={{
-                    fontSize: { xs: '0.875rem', sm: '1rem' },
+                <Tooltip
+                  title={site.name}
+                  arrow
+                  placement="top"
+                  componentsProps={{
+                    tooltip: {
+                      sx: {
+                        fontSize: '1rem',
+                        lineHeight: 1.5,
+                        p: 1
+                      }
+                    }
                   }}
                 >
-                  {site.name}
-                </Typography>
+                  <Typography
+                    variant='subtitle2'
+                    fontWeight='medium'
+                    noWrap
+                    sx={{
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        fontSize: { xs: '0.875rem', sm: '1rem' },
+                        fontWeight: 'bold',
+                        color: 'primary.main',
+                      }
+                    }}
+                  >
+                    {site.name}
+                  </Typography>
+                </Tooltip>
               </Box>
 
               {/* 描述 */}

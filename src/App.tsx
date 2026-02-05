@@ -60,6 +60,9 @@ import {
   Slider,
   FormControlLabel,
   Switch,
+  Fab,
+  Zoom,
+  useScrollTrigger,
 } from '@mui/material';
 import SortIcon from '@mui/icons-material/Sort';
 import SaveIcon from '@mui/icons-material/Save';
@@ -73,6 +76,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 // 根据环境选择使用真实API还是模拟API
@@ -103,6 +107,40 @@ const DEFAULT_CONFIGS = {
   'site.searchBoxEnabled': 'true', // 是否启用搜索框
   'site.searchBoxGuestEnabled': 'true', // 访客是否可以使用搜索框
 };
+
+function ScrollTop(props: { children: React.ReactElement; window?: () => Window }) {
+  const { children, window } = props;
+  const trigger = useScrollTrigger({
+    target: window ? window() : undefined,
+    disableHysteresis: true,
+    threshold: 100,
+  });
+
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (
+      (event.target as HTMLDivElement).ownerDocument || document
+    ).querySelector('#back-to-top-anchor');
+
+    if (anchor) {
+      anchor.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  return (
+    <Zoom in={trigger}>
+      <Box
+        onClick={handleClick}
+        role="presentation"
+        sx={{ position: 'fixed', bottom: 80, right: 16, zIndex: 100 }}
+      >
+        {children}
+      </Box>
+    </Zoom>
+  );
+}
 
 function App() {
   // 主题模式状态
@@ -1125,6 +1163,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <div id="back-to-top-anchor" />
 
       {/* 错误提示 Snackbar */}
       <Snackbar
@@ -2086,7 +2125,7 @@ function App() {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                p: 1,
+                p: 1.5,
                 borderRadius: 10,
                 bgcolor: 'background.paper',
                 color: 'text.secondary',
@@ -2099,10 +2138,15 @@ function App() {
                 textDecoration: 'none',
               }}
             >
-              <GitHubIcon />
+              <GitHubIcon fontSize="large" />
             </Paper>
           </Box>
         </Container>
+        <ScrollTop>
+          <Fab size="large" aria-label="scroll back to top" color="primary">
+            <KeyboardArrowUpIcon fontSize="large" />
+          </Fab>
+        </ScrollTop>
       </Box>
     </ThemeProvider>
   );
