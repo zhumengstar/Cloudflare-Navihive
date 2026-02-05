@@ -492,7 +492,12 @@ function App() {
   const handleSiteDelete = async (siteId: number) => {
     try {
       await api.deleteSite(siteId);
-      await fetchData(); // 重新加载数据
+      setGroups((prevGroups) =>
+        prevGroups.map((group) => ({
+          ...group,
+          sites: group.sites.filter((site) => site.id !== siteId),
+        }))
+      );
     } catch (error) {
       console.error('删除站点失败:', error);
       handleError('删除站点失败: ' + (error as Error).message);
