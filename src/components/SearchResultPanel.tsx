@@ -14,14 +14,21 @@ import {
   Chip,
   Box,
   Divider,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { Language as LanguageIcon, Folder as FolderIcon } from '@mui/icons-material';
+import {
+  Language as LanguageIcon,
+  Folder as FolderIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
 import type { SearchResultItem } from '../utils/search';
 
 interface SearchResultPanelProps {
   results: SearchResultItem[];
   query: string;
   onResultClick: (result: SearchResultItem) => void;
+  onDelete?: (id: number) => void;
   open: boolean;
 }
 
@@ -29,6 +36,7 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
   results,
   query,
   onResultClick,
+  onDelete,
   open,
 }) => {
   if (!open || !query || results.length === 0) {
@@ -194,6 +202,34 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
                       }
                     />
                   </Box>
+
+                  {/* 删除按钮 */}
+                  {result.type === 'site' && (
+                    <Box sx={{ ml: 1 }}>
+                      <Tooltip title={onDelete ? '删除书签' : '请先登录以管理书签'}>
+                        <span>
+                          <IconButton
+                            size='small'
+                            disabled={!onDelete}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onDelete && window.confirm(`确定要删除 "${result.name}" 吗？`)) {
+                                onDelete(result.id);
+                              }
+                            }}
+                            sx={{
+                              color: 'text.disabled',
+                              '&:hover': {
+                                color: onDelete ? 'error.main' : 'text.disabled',
+                              },
+                            }}
+                          >
+                            <DeleteIcon fontSize='small' />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  )}
                 </Box>
               </ListItemButton>
             </ListItem>

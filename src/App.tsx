@@ -1465,15 +1465,9 @@ function App() {
             return (
               <Box sx={{ mb: 4 }}>
                 <SearchBox
-                  groups={groups.map((g) => ({
-                    id: g.id,
-                    name: g.name,
-                    order_num: g.order_num,
-                    is_public: g.is_public,
-                    created_at: g.created_at,
-                    updated_at: g.updated_at,
-                  }))}
+                  groups={groups}
                   sites={groups.flatMap((g) => g.sites || [])}
+                  onDelete={isAuthenticated ? handleSiteDelete : undefined}
                   onInternalResultClick={(result: SearchResultItem) => {
                     // 可选：滚动到对应的元素
                     if (result.type === 'group') {

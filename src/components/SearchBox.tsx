@@ -216,6 +216,23 @@ const SearchBox: React.FC<SearchBoxProps> = ({ groups, sites, onInternalResultCl
     return () => document.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
+  // 处理输入框聚焦
+  const handleInputFocus = () => {
+    if (mode === 'internal') {
+      if (!query.trim()) {
+        // 空查询时显示所有站点（限制前 50 个以防卡顿）
+        const allResults = searchInternal('', groups, sites);
+        setResults(allResults.slice(0, 50));
+        setShowResults(true);
+      } else {
+        // 非空时，如果面板未打开，重新触发搜索
+        if (!showResults) {
+          handleInternalSearch(query);
+        }
+      }
+    }
+  };
+
   return (
     <Box ref={searchBoxRef} sx={{ position: 'relative', width: '100%', maxWidth: 800, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -310,6 +327,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({ groups, sites, onInternalResultCl
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={handleInputFocus}
+            onClick={handleInputFocus}
             sx={{ ml: 1, flex: 1 }}
             inputProps={{ 'aria-label': '搜索' }}
             autoComplete='off'

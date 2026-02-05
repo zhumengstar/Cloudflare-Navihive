@@ -40,13 +40,13 @@ function searchSites(
   const results: SearchResultItem[] = [];
   const lowerQuery = query.toLowerCase().trim();
 
-  if (!lowerQuery) return results;
+  // if (!lowerQuery) return results; // 移除此行，允许空查询返回所有结果
 
   for (const site of sites) {
     const matchedFields: string[] = [];
 
     // 匹配网站名称
-    if (fuzzyMatch(site.name, lowerQuery)) {
+    if (!lowerQuery || fuzzyMatch(site.name, lowerQuery)) {
       matchedFields.push('name');
     }
 
@@ -92,13 +92,13 @@ function searchGroups(groups: Group[], query: string): SearchResultItem[] {
   const results: SearchResultItem[] = [];
   const lowerQuery = query.toLowerCase().trim();
 
-  if (!lowerQuery) return results;
+  // if (!lowerQuery) return results; // 移除此行
 
   for (const group of groups) {
     const matchedFields: string[] = [];
 
     // 匹配分组名称
-    if (fuzzyMatch(group.name, lowerQuery)) {
+    if (!lowerQuery || fuzzyMatch(group.name, lowerQuery)) {
       matchedFields.push('name');
     }
 
@@ -120,9 +120,10 @@ function searchGroups(groups: Group[], query: string): SearchResultItem[] {
  * 站内搜索主函数
  */
 export function searchInternal(query: string, groups: Group[], sites: Site[]): SearchResultItem[] {
-  if (!query || !query.trim()) {
-    return [];
-  }
+  // 允许空查询
+  // if (!query || !query.trim()) {
+  //   return [];
+  // }
 
   // 创建分组 ID 到分组的映射
   const groupsMap = new Map<number, Group>();
