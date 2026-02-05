@@ -19,7 +19,7 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
 } from '@dnd-kit/sortable';
 // 引入Material UI组件
 import {
@@ -29,11 +29,9 @@ import {
   Box,
   IconButton,
   Tooltip,
-  Snackbar,
-  Alert,
   Collapse,
 } from '@mui/material';
-import SortIcon from '@mui/icons-material/Sort';
+
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -89,7 +87,7 @@ function DroppableGroupContainer({
 interface GroupCardProps {
   group: GroupWithSites;
   index?: number; // 用于Draggable的索引，仅在分组排序模式下需要
-  sortMode: 'None' | 'GroupSort' | 'SiteSort';
+  sortMode: 'None' | 'GroupSort' | 'SiteSort' | 'CrossGroupDrag';
   currentSortingGroupId: number | null;
   viewMode?: 'readonly' | 'edit'; // 访问模式
   onUpdate: (updatedSite: Site) => void;
@@ -112,7 +110,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
   onUpdate,
   onDelete,
   onSaveSiteOrder,
-  onStartSiteSort,
+  // onStartSiteSort, // 未使用
   onAddSite,
   onUpdateGroup,
   onDeleteGroup,
@@ -124,9 +122,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
   const [sites, setSites] = useState<Site[]>(group.sites);
   // 添加编辑弹窗的状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  // 添加提示消息状态
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
+
   // 添加折叠状态
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const savedState = localStorage.getItem(`group-${group.id}-collapsed`);
@@ -208,7 +204,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
 
   // 判断是否有站点正在拖拽到此分组
   const isDraggingOverThisGroup: boolean =
-    sortMode === 'SiteSort' && !!draggedSiteId && currentSortingGroupId !== group.id;
+    (sortMode === 'SiteSort' || sortMode === 'CrossGroupDrag') && !!draggedSiteId && currentSortingGroupId !== group.id;
 
   // 渲染站点卡片区域
   const renderSites = () => {
@@ -218,6 +214,58 @@ const GroupCard: React.FC<GroupCardProps> = ({
     // 如果当前不是正在编辑的分组且处于站点排序模式，不显示站点
     if (!isCurrentEditingGroup && sortMode === 'SiteSort') {
       return null;
+    }
+
+    // 跨分组拖动模式：所有分组都显示站点并启用拖动
+    if (sortMode === 'CrossGroupDrag') {
+      return (
+        <DroppableGroupContainer
+          groupId={group.id}
+          isDraggingOver={isDraggingOverThisGroup}
+        >
+          <SortableContext
+            items={sitesToRender.map((site) => `site-${site.id}`)}
+            strategy={rectSortingStrategy}
+          >
+            <Box sx={{ width: '100%' }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  margin: -1,
+                }}
+              >
+                {sitesToRender.map((site, idx) => (
+                  <Box
+                    key={site.id || idx}
+                    sx={{
+                      width: {
+                        xs: '100%',
+                        sm: '50%',
+                        md: '33.33%',
+                        lg: '25%',
+                        xl: '20%',
+                      },
+                      padding: 1,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <SiteCard
+                      site={site}
+                      onUpdate={onUpdate}
+                      onDelete={onDelete}
+                      isEditMode={true}
+                      viewMode={viewMode}
+                      index={idx}
+                      iconApi={configs?.['site.iconApi']}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </SortableContext>
+        </DroppableGroupContainer>
+      );
     }
 
     // 如果是编辑模式，使用DndContext包装
@@ -235,7 +283,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
           >
             <SortableContext
               items={sitesToRender.map((site) => `site-${site.id}`)}
-              strategy={horizontalListSortingStrategy}
+              strategy={rectSortingStrategy}
             >
               <Box sx={{ width: '100%' }}>
                 <Box
@@ -326,28 +374,9 @@ const GroupCard: React.FC<GroupCardProps> = ({
     onSaveSiteOrder(group.id, sites);
   };
 
-  // 处理排序按钮点击
-  const handleSortClick = () => {
-    if (!group.id) {
-      console.error('分组 ID 不存在,无法开始排序');
-      return;
-    }
-    if (group.sites.length < 2) {
-      setSnackbarMessage('至少需要2个站点才能进行排序');
-      setSnackbarOpen(true);
-      return;
-    }
-    // 确保分组展开
-    if (isCollapsed) {
-      setIsCollapsed(false);
-    }
-    onStartSiteSort(group.id);
-  };
 
-  // 关闭提示消息
-  const handleCloseSnackbar = () => {
-    setSnackbarOpen(false);
-  };
+
+
 
   // 修改分组标题区域的渲染
   return (
@@ -375,6 +404,21 @@ const GroupCard: React.FC<GroupCardProps> = ({
         alignItems={{ xs: 'flex-start', sm: 'center' }}
         mb={2.5}
         gap={1}
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          mx: { xs: -2, sm: -3 }, // 抵消父容器 padding
+          mt: { xs: -2, sm: -3 }, // 抵消父容器 padding
+          px: { xs: 2, sm: 3 },   // 补回 padding
+          py: 2,
+          backgroundColor: (theme) =>
+            theme.palette.mode === 'dark' ? 'rgba(33, 33, 33, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+          borderTopLeftRadius: 16, // 对应 borderRadius 4 (4 * 4px = 16px)
+          borderTopRightRadius: 16,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
       >
         <Box
           sx={{
@@ -457,19 +501,8 @@ const GroupCard: React.FC<GroupCardProps> = ({
                     添加卡片
                   </Button>
                 )}
-                <Button
-                  variant='outlined'
-                  color='primary'
-                  size='small'
-                  startIcon={<SortIcon />}
-                  onClick={handleSortClick}
-                  sx={{
-                    minWidth: 'auto',
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  }}
-                >
-                  排序
-                </Button>
+                {/* 移除排序按钮 */}
+                {/* <Button ... 排序 /> */}
 
                 {onUpdateGroup && onDeleteGroup && (
                   <Tooltip title='编辑分组'>
@@ -505,12 +538,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
         />
       )}
 
-      {/* 提示消息 */}
-      <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity='info' sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
+
     </Paper>
   );
 };

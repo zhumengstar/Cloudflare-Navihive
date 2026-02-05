@@ -52,7 +52,7 @@ const SiteCard = memo(function SiteCard({
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 9999 : 'auto',
-    opacity: isDragging ? 0.8 : 1,
+    opacity: isDragging ? 0 : 1, // 拖动时隐藏原位置
     position: 'relative' as const,
   };
 
@@ -114,8 +114,8 @@ const SiteCard = memo(function SiteCard({
           boxShadow: isDragging ? 8 : 2,
           '&:hover': !isEditMode
             ? {
-                boxShadow: 5,
-              }
+              boxShadow: 5,
+            }
             : {},
           overflow: 'hidden',
           backgroundColor: (theme) =>

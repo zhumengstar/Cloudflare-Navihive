@@ -195,14 +195,14 @@ function validateExportData(data: unknown): { valid: boolean; errors: string[] }
 
     const d = data as Record<string, unknown>;
 
-    // 验证 version
-    if (!d.version || typeof d.version !== 'string') {
-        errors.push('缺少或无效的版本信息');
+    // 验证 version (可选字段，允许缺失)
+    if (d.version !== undefined && typeof d.version !== 'string') {
+        errors.push('version 必须是字符串');
     }
 
-    // 验证 exportDate
-    if (!d.exportDate || typeof d.exportDate !== 'string') {
-        errors.push('缺少或无效的导出日期');
+    // 验证 exportDate (可选字段，允许缺失)
+    if (d.exportDate !== undefined && typeof d.exportDate !== 'string') {
+        errors.push('exportDate 必须是字符串');
     }
 
     // 验证 groups
@@ -255,8 +255,8 @@ function validateExportData(data: unknown): { valid: boolean; errors: string[] }
         });
     }
 
-    // 验证 configs
-    if (!d.configs || typeof d.configs !== 'object') {
+    // 验证 configs (可选字段，允许缺失但如果存在必须是对象)
+    if (d.configs !== undefined && (typeof d.configs !== 'object' || d.configs === null)) {
         errors.push('configs 必须是对象');
     }
 
@@ -365,8 +365,8 @@ export default {
                     try {
                         // 速率限制检查
                         const clientIP = request.headers.get('CF-Connecting-IP') ||
-                                       request.headers.get('X-Forwarded-For') ||
-                                       'unknown';
+                            request.headers.get('X-Forwarded-For') ||
+                            'unknown';
 
                         if (!loginRateLimiter.check(clientIP)) {
                             const remaining = loginRateLimiter.getRemaining(clientIP);
@@ -403,31 +403,31 @@ export default {
                             );
                         }
 
-                    const result = await api.login(loginData as LoginRequest);
+                        const result = await api.login(loginData as LoginRequest);
 
-                    // 如果登录成功，设置 HttpOnly Cookie
-                    if (result.success && result.token) {
-                        const maxAge = loginData.rememberMe ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
+                        // 如果登录成功，设置 HttpOnly Cookie
+                        if (result.success && result.token) {
+                            const maxAge = loginData.rememberMe ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
 
-                        return createJsonResponse(
-                            { success: true, message: result.message },
-                            request,
-                            {
-                                headers: {
-                                    'Set-Cookie': [
-                                        `auth_token=${result.token}`,
-                                        'HttpOnly',
-                                        'Secure',
-                                        'SameSite=Strict',
-                                        `Max-Age=${maxAge}`,
-                                        'Path=/',
-                                    ].join('; '),
-                                },
-                            }
-                        );
-                    }
+                            return createJsonResponse(
+                                { success: true, message: result.message },
+                                request,
+                                {
+                                    headers: {
+                                        'Set-Cookie': [
+                                            `auth_token=${result.token}`,
+                                            'HttpOnly',
+                                            'Secure',
+                                            'SameSite=Strict',
+                                            `Max-Age=${maxAge}`,
+                                            'Path=/',
+                                        ].join('; '),
+                                    },
+                                }
+                            );
+                        }
 
-                    return createJsonResponse(result, request);
+                        return createJsonResponse(result, request);
                     } catch (error) {
                         return createJsonResponse(
                             {

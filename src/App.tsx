@@ -73,6 +73,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 // 根据环境选择使用真实API还是模拟API
 const isDevEnvironment = import.meta.env.DEV;
@@ -88,6 +89,7 @@ enum SortMode {
   None, // 不排序
   GroupSort, // 分组排序
   SiteSort, // 站点排序
+  CrossGroupDrag, // 跨分组拖动
 }
 
 // 默认配置
@@ -209,6 +211,7 @@ function App() {
   // 跨分组拖拽状态
   const [draggedSiteId, setDraggedSiteId] = useState<string | null>(null);
   const [activeSite, setActiveSite] = useState<Site | null>(null);
+  const [dragStartGroupId, setDragStartGroupId] = useState<number | null>(null);
 
   // 菜单打开关闭
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -474,13 +477,16 @@ function App() {
       if (result) {
         console.log('分组排序更新成功');
         // 重新获取最新数据
-        await fetchData();
+        // 重新获取最新数据
+        // await fetchData();
       } else {
         throw new Error('分组排序更新失败');
       }
 
-      setSortMode(SortMode.None);
-      setCurrentSortingGroupId(null);
+
+
+      // setSortMode(SortMode.None);
+      // setCurrentSortingGroupId(null);
     } catch (error) {
       console.error('更新分组排序失败:', error);
       handleError('更新分组排序失败: ' + (error as Error).message);
@@ -504,13 +510,16 @@ function App() {
       if (result) {
         console.log('站点排序更新成功');
         // 重新获取最新数据
-        await fetchData();
+        // 重新获取最新数据
+        // await fetchData();
       } else {
         throw new Error('站点排序更新失败');
       }
 
-      setSortMode(SortMode.None);
-      setCurrentSortingGroupId(null);
+
+
+      // setSortMode(SortMode.None);
+      // setCurrentSortingGroupId(null);
     } catch (error) {
       console.error('更新站点排序失败:', error);
       handleError('更新站点排序失败: ' + (error as Error).message);
@@ -522,6 +531,7 @@ function App() {
     console.log('开始分组排序');
     setSortMode(SortMode.GroupSort);
     setCurrentSortingGroupId(null);
+    handleMenuClose();
   };
 
   // 启动站点排序
@@ -529,6 +539,7 @@ function App() {
     console.log('开始站点排序');
     setSortMode(SortMode.SiteSort);
     setCurrentSortingGroupId(groupId);
+    handleMenuClose();
   };
 
   // 取消排序
@@ -537,105 +548,194 @@ function App() {
     setCurrentSortingGroupId(null);
   };
 
+  // 启动跨分组拖动模式
+  const startCrossGroupDrag = () => {
+    console.log('开始跨分组拖动');
+    setSortMode(SortMode.CrossGroupDrag);
+    setCurrentSortingGroupId(null);
+    handleMenuClose();
+  };
+
   // 处理跨分组拖拽的 DragOver 事件
   const handleSiteDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
+    if (sortMode !== SortMode.CrossGroupDrag) return;
+
     const activeId = active.id.toString();
+    const overId = over.id.toString();
 
-    // 只处理站点拖拽
     if (!activeId.startsWith('site-')) return;
-
-    // 获取拖拽的站点
     const activeSiteId = parseInt(activeId.replace('site-', ''));
-    let draggedSite: Site | null = null;
-    let sourceGroupId: number | null = null;
 
-    // 查找拖拽的站点和源分组
-    for (const group of groups) {
-      const site = group.sites.find((s) => s.id === activeSiteId);
-      if (site) {
-        draggedSite = site;
-        sourceGroupId = group.id;
-        break;
-      }
+    // 查找 active 所在的 Group
+    const activeGroup = groups.find(g => g.sites.some(s => s.id === activeSiteId));
+    if (!activeGroup) return;
+
+    // 查找 over 所在的 Group
+    let overGroupId: number | null = null;
+    if (overId.startsWith('group-')) {
+      overGroupId = parseInt(overId.replace('group-', ''));
+    } else if (overId.startsWith('site-')) {
+      const overSiteId = parseInt(overId.replace('site-', ''));
+      const g = groups.find(g => g.sites.some(s => s.id === overSiteId));
+      if (g) overGroupId = g.id;
     }
 
-    if (!draggedSite || !sourceGroupId) return;
+    if (!overGroupId || activeGroup.id === overGroupId) return;
 
-    // 更新 activeSite 状态用于拖拽预览
-    setActiveSite(draggedSite);
+    // 移动站点以显示占位
+    setGroups((prev) => {
+      const newGroups = prev.map(g => ({ ...g, sites: [...g.sites] }));
+      const source = newGroups.find(g => g.id === activeGroup.id);
+      const target = newGroups.find(g => g.id === overGroupId);
+
+      if (!source || !target) return prev;
+
+      const siteIndex = source.sites.findIndex(s => s.id === activeSiteId);
+      if (siteIndex === -1) return prev;
+
+      const [movedSite] = source.sites.splice(siteIndex, 1);
+      if (!movedSite) return prev;
+      movedSite.group_id = target.id;
+
+      let insertIndex = target.sites.length;
+      if (overId.startsWith('site-')) {
+        const overSiteId = parseInt(overId.replace('site-', ''));
+        const idx = target.sites.findIndex(s => s.id === overSiteId);
+        if (idx !== -1) {
+          // 判断插入位置：使用中心点判断 (Sorting Method)
+          // 比较 active 和 over 的中心点位置
+          const activeRect = active.rect.current.translated;
+          const overRect = over.rect;
+
+          if (activeRect && overRect) {
+            const activeCenterY = activeRect.top + activeRect.height / 2;
+            const overCenterY = overRect.top + overRect.height / 2;
+
+            const activeCenterX = activeRect.left + activeRect.width / 2;
+            const overCenterX = overRect.left + overRect.width / 2;
+
+            // 简单的中心点比较逻辑，适配 Grid 布局
+            // 如果 Y 轴中心点差异明显（大于一半高度），优先判定行
+            let isAfter = false;
+
+            if (activeCenterY > overCenterY + overRect.height / 2) {
+              isAfter = true; // 明显在下一行
+            } else if (activeCenterY < overCenterY - overRect.height / 2) {
+              isAfter = false; // 明显在上一行
+            } else {
+              // 同行（或重叠），比较 X 轴
+              if (activeCenterX > overCenterX) {
+                isAfter = true;
+              }
+            }
+
+            const modifier = isAfter ? 1 : 0;
+            insertIndex = idx + modifier;
+          } else {
+            // Fallback
+            insertIndex = idx;
+          }
+        }
+      }
+
+      target.sites.splice(insertIndex, 0, movedSite);
+
+      return newGroups;
+    });
   };
 
   // 处理跨分组拖拽结束事件
   const handleCrossGroupDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    const activeId = active.id.toString();
+
     setDraggedSiteId(null);
     setActiveSite(null);
+    const startGroupId = dragStartGroupId;
+    setDragStartGroupId(null);
 
-    if (!over) return;
-
-    const activeId = active.id.toString();
-    const overId = over.id.toString();
-
-    // 只处理站点拖拽
-    if (!activeId.startsWith('site-')) return;
+    if (!over || !activeId.startsWith('site-')) return;
 
     const activeSiteId = parseInt(activeId.replace('site-', ''));
-    let draggedSite: Site | null = null;
-    let sourceGroupId: number | null = null;
 
-    // 查找拖拽的站点和源分组
-    for (const group of groups) {
-      const site = group.sites.find((s) => s.id === activeSiteId);
-      if (site) {
-        draggedSite = site;
-        sourceGroupId = group.id;
-        break;
+    // 查找当前所在的组 (可能已经在 DragOver 中移动了)
+    const currentGroup = groups.find(g => g.sites.some(s => s.id === activeSiteId));
+    if (!currentGroup) return;
+
+    let finalSites = [...currentGroup.sites];
+    let orderChanged = false;
+
+    // 处理同组内的排序
+    if (over.id.toString().startsWith('site-')) {
+      const overSiteId = parseInt(over.id.toString().replace('site-', ''));
+      const oldIndex = currentGroup.sites.findIndex(s => s.id === activeSiteId);
+      const overIndex = currentGroup.sites.findIndex(s => s.id === overSiteId);
+
+      if (oldIndex !== -1 && overIndex !== -1) {
+        let newIndex = overIndex;
+
+        // 使用 Rect 判断相对位置，修正 finalIndex
+        const activeRect = active.rect.current.translated;
+        const overRect = over.rect;
+
+        if (activeRect && overRect) {
+          const activeCenterY = activeRect.top + activeRect.height / 2;
+          const overCenterY = overRect.top + overRect.height / 2;
+          const activeCenterX = activeRect.left + activeRect.width / 2;
+          const overCenterX = overRect.left + overRect.width / 2;
+
+          let isAfter = false;
+          if (activeCenterY > overCenterY + overRect.height / 2) {
+            isAfter = true;
+          } else if (activeCenterY < overCenterY - overRect.height / 2) {
+            isAfter = false;
+          } else {
+            if (activeCenterX > overCenterX) isAfter = true;
+          }
+
+          // 根据拖拽方向和相对位置修正索引
+          if (oldIndex < overIndex) {
+            // 向下拖拽，默认是放在 over 后面 (Index=overIndex)
+            // 如果判断实际上是 Before (Top half)，则 -1
+            if (!isAfter) newIndex = overIndex - 1;
+          } else {
+            // 向上拖拽，默认是放在 over 前面 (Index=overIndex)
+            // 如果判断实际上是 After (Bottom half)，则 +1
+            if (isAfter) newIndex = overIndex + 1;
+          }
+        }
+
+        if (oldIndex !== newIndex) {
+          finalSites = arrayMove(currentGroup.sites, oldIndex, newIndex);
+          orderChanged = true;
+
+          // 更新本地状态
+          setGroups(prev => prev.map(g =>
+            g.id === currentGroup.id ? { ...g, sites: finalSites } : g
+          ));
+        }
       }
     }
 
-    if (!draggedSite || !sourceGroupId) return;
-
-    // 判断是否是跨分组拖拽
-    if (overId.startsWith('group-')) {
-      const targetGroupId = parseInt(overId.replace('group-', ''));
-
-      // 如果目标分组与源分组不同，移动站点
-      if (targetGroupId !== sourceGroupId) {
-        try {
-          const updatedSite = {
-            ...draggedSite,
-            group_id: targetGroupId,
-          };
-
-          await api.updateSite(activeSiteId, updatedSite);
-          await fetchData();
-          setSnackbarMessage(`已将 "${draggedSite.name}" 移动到新分组`);
-          setSnackbarOpen(true);
-        } catch (error) {
-          console.error('移动站点失败:', error);
-          handleError('移动站点失败: ' + (error as Error).message);
-        }
+    // 同步到 API
+    try {
+      // 检查是否跨组移动
+      if (startGroupId && currentGroup.id !== startGroupId) {
+        await api.updateSite(activeSiteId, { group_id: currentGroup.id });
+        await handleSaveSiteOrder(currentGroup.id, finalSites);
+        setSnackbarMessage('已移动站点');
+        setSnackbarOpen(true);
+      } else if (orderChanged) {
+        // 仅排序
+        await handleSaveSiteOrder(currentGroup.id, finalSites);
       }
-    } else if (overId.startsWith('site-')) {
-      // 同一分组内的排序
-      const targetSiteId = parseInt(overId.replace('site-', ''));
-      const targetGroupId = currentSortingGroupId;
-
-      if (targetGroupId === sourceGroupId) {
-        const group = groups.find((g) => g.id === targetGroupId);
-        if (!group) return;
-
-        const oldIndex = group.sites.findIndex((s) => s.id === activeSiteId);
-        const newIndex = group.sites.findIndex((s) => s.id === targetSiteId);
-
-        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-          const newSites = arrayMove(group.sites, oldIndex, newIndex);
-          await handleSaveSiteOrder(targetGroupId, newSites);
-        }
-      }
+    } catch (error) {
+      console.error('移动/排序失败:', error);
+      handleError('移动/排序失败: ' + (error as Error).message);
+      await fetchData(); // 失败回滚
     }
   };
 
@@ -652,6 +752,7 @@ function App() {
         const site = group.sites.find((s) => s.id === activeSiteId);
         if (site) {
           setActiveSite(site);
+          setDragStartGroupId(group.id);
           break;
         }
       }
@@ -899,8 +1000,11 @@ function App() {
             throw new Error('导入文件格式错误：缺少站点数据');
           }
 
-          if (!importData.configs || typeof importData.configs !== 'object') {
-            throw new Error('导入文件格式错误：缺少配置数据');
+          // configs 是可选字段，如果缺失则使用空对象
+          if (!importData.configs) {
+            importData.configs = {};
+          } else if (typeof importData.configs !== 'object') {
+            throw new Error('导入文件格式错误：配置数据格式无效');
           }
 
           // 调用API导入数据
@@ -1100,8 +1204,8 @@ function App() {
                     theme.palette.mode === 'dark'
                       ? 'rgba(0, 0, 0, ' + (1 - Number(configs['site.backgroundOpacity'])) + ')'
                       : 'rgba(255, 255, 255, ' +
-                        (1 - Number(configs['site.backgroundOpacity'])) +
-                        ')',
+                      (1 - Number(configs['site.backgroundOpacity'])) +
+                      ')',
                   zIndex: 1,
                 },
               }}
@@ -1165,6 +1269,15 @@ function App() {
                     >
                       保存分组顺序
                     </Button>
+                  )}
+                  {sortMode === SortMode.CrossGroupDrag && (
+                    <Typography
+                      variant='body2'
+                      color='text.secondary'
+                      sx={{ alignSelf: 'center', mr: 1 }}
+                    >
+                      拖动站点到其他分组
+                    </Typography>
                   )}
                   <Button
                     variant='outlined'
@@ -1243,6 +1356,12 @@ function App() {
                             <SortIcon fontSize='small' />
                           </ListItemIcon>
                           <ListItemText>编辑排序</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={startCrossGroupDrag}>
+                          <ListItemIcon>
+                            <SwapHorizIcon fontSize='small' />
+                          </ListItemIcon>
+                          <ListItemText>跨分组拖动</ListItemText>
                         </MenuItem>
                         <MenuItem onClick={handleOpenConfig}>
                           <ListItemIcon>
@@ -1384,7 +1503,7 @@ function App() {
                       <Box key={`group-${group.id}`} id={`group-${group.id}`}>
                         <GroupCard
                           group={group}
-                          sortMode={sortMode === SortMode.None ? 'None' : 'SiteSort'}
+                          sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
                           currentSortingGroupId={currentSortingGroupId}
                           viewMode={viewMode}
                           onUpdate={handleSiteUpdate}
@@ -1401,26 +1520,28 @@ function App() {
                       </Box>
                     ))}
                   </Stack>
-                  <DragOverlay>
+                  <DragOverlay dropAnimation={null}>
                     {activeSite && (
                       <Box
                         sx={{
                           width: {
-                            xs: '50%',
-                            sm: '50%',
-                            md: '25%',
-                            lg: '25%',
-                            xl: '25%',
+                            xs: 200,
+                            sm: 220,
+                            md: 250,
+                            lg: 280,
+                            xl: 300,
                           },
                           padding: 1,
                           boxSizing: 'border-box',
+                          cursor: 'grabbing',
+                          opacity: 0.95,
                         }}
                       >
                         <SiteCard
                           site={activeSite}
-                          onUpdate={() => {}}
-                          onDelete={() => {}}
-                          isEditMode={true}
+                          onUpdate={() => { }}
+                          onDelete={() => { }}
+                          isEditMode={false}
                           viewMode={viewMode}
                           iconApi={configs?.['site.iconApi']}
                         />

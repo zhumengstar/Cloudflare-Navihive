@@ -1,107 +1,56 @@
 import { Group, Site, LoginResponse, ExportData, ImportResult, GroupWithSites } from './http';
+import { mockGroups as importedMockGroups, mockSites as importedMockSites, mockConfigs as importedMockConfigs } from './mockData';
 
-// 模拟数据
-const mockGroups: Group[] = [
-  {
-    id: 1,
-    name: '常用工具',
-    order_num: 1,
-    is_public: 1, // 公开分组
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: 2,
-    name: '开发资源',
-    order_num: 2,
-    is_public: 1, // 公开分组
-    created_at: '2024-01-01T20:00:00Z',
-    updated_at: '2024-01-01T30:00:00Z',
-  },
-  {
-    id: 3,
-    name: '私密分组',
-    order_num: 3,
-    is_public: 0, // 私密分组（仅管理员可见）
-    created_at: '2024-01-01T40:00:00Z',
-    updated_at: '2024-01-01T50:00:00Z',
-  },
-];
-
-const mockSites: Site[] = [
-  {
-    id: 1,
-    group_id: 1,
-    name: 'Google',
-    url: 'https://www.google.com',
-    icon: 'https://img.zhengmi.org/file/1742480539412_微信图片_20240707011628.jpg',
-    description: '搜索引擎',
-    notes: '',
-    order_num: 1,
-    is_public: 1, // 公开站点
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: 2,
-    group_id: 1,
-    name: 'GitHub',
-    url: 'https://github.com',
-    icon: 'https://img.zhengmi.org/file/1742480539412_微信图片_20240707011628.jpg',
-    description: '代码托管平台',
-    notes: '',
-    order_num: 2,
-    is_public: 1, // 公开站点
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: 3,
-    group_id: 1,
-    name: '私密书签',
-    url: 'https://private.example.com',
-    icon: 'https://img.zhengmi.org/file/1742480539412_微信图片_20240707011628.jpg',
-    description: '私密站点（仅管理员可见）',
-    notes: '',
-    order_num: 3,
-    is_public: 0, // 私密站点
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: 4,
-    group_id: 2,
-    name: 'Stack Overflow',
-    url: 'https://stackoverflow.com',
-    icon: 'github.png',
-    description: '技术问答社区',
-    notes: '',
-    order_num: 1,
-    is_public: 1, // 公开站点
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: 5,
-    group_id: 3,
-    name: '内部工具',
-    url: 'https://internal.example.com',
-    icon: 'github.png',
-    description: '公司内部工具',
-    notes: '',
-    order_num: 1,
-    is_public: 1, // 公开站点（但属于私密分组）
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-  },
-];
-
-// 添加模拟配置数据
-const mockConfigs: Record<string, string> = {
-  'site.title': '我的导航站',
-  'site.name': '个人导航',
-  'site.customCss': '',
+// 本地存储键名
+const STORAGE_KEYS = {
+  GROUPS: 'mock_groups',
+  SITES: 'mock_sites',
+  CONFIGS: 'mock_configs',
 };
+
+// 从localStorage加载数据，如果不存在则使用导入的mock数据
+function loadFromStorage<T>(key: string, defaultValue: T): T {
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.warn(`解析localStorage数据失败: ${key}`, e);
+      }
+    }
+  }
+  return defaultValue;
+}
+
+// 保存数据到localStorage
+function saveToStorage<T>(key: string, data: T): void {
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(`保存localStorage数据失败: ${key}`, e);
+    }
+  }
+}
+
+// 使用localStorage持久化的mock数据
+const mockGroups: Group[] = loadFromStorage(STORAGE_KEYS.GROUPS, [...importedMockGroups]);
+const mockSites: Site[] = loadFromStorage(STORAGE_KEYS.SITES, [...importedMockSites]);
+const mockConfigs: Record<string, string> = loadFromStorage(STORAGE_KEYS.CONFIGS, { ...importedMockConfigs });
+
+// 保存当前状态的辅助函数
+function saveGroupsToStorage(): void {
+  saveToStorage(STORAGE_KEYS.GROUPS, mockGroups);
+}
+
+function saveSitesToStorage(): void {
+  saveToStorage(STORAGE_KEYS.SITES, mockSites);
+}
+
+function saveConfigsToStorage(): void {
+  saveToStorage(STORAGE_KEYS.CONFIGS, mockConfigs);
+}
 
 // 模拟API实现
 export class MockNavigationClient {
@@ -229,6 +178,7 @@ export class MockNavigationClient {
       updated_at: new Date().toISOString(),
     };
     mockGroups.push(newGroup);
+    saveGroupsToStorage();
     return newGroup;
   }
 
@@ -246,6 +196,7 @@ export class MockNavigationClient {
       updated_at: new Date().toISOString(),
     };
     const updated = mockGroups[index];
+    saveGroupsToStorage();
     return updated || null;
   }
 
@@ -255,6 +206,7 @@ export class MockNavigationClient {
     if (index === -1) return false;
 
     mockGroups.splice(index, 1);
+    saveGroupsToStorage();
     return true;
   }
 
@@ -296,6 +248,7 @@ export class MockNavigationClient {
       updated_at: new Date().toISOString(),
     };
     mockSites.push(newSite);
+    saveSitesToStorage();
     return newSite;
   }
 
@@ -313,6 +266,7 @@ export class MockNavigationClient {
       updated_at: new Date().toISOString(),
     };
     const updated = mockSites[index];
+    saveSitesToStorage();
     return updated || null;
   }
 
@@ -322,6 +276,7 @@ export class MockNavigationClient {
     if (index === -1) return false;
 
     mockSites.splice(index, 1);
+    saveSitesToStorage();
     return true;
   }
 
@@ -336,6 +291,7 @@ export class MockNavigationClient {
         }
       }
     }
+    saveGroupsToStorage();
     return true;
   }
 
@@ -350,6 +306,7 @@ export class MockNavigationClient {
         }
       }
     }
+    saveSitesToStorage();
     return true;
   }
 
@@ -367,6 +324,7 @@ export class MockNavigationClient {
   async setConfig(key: string, value: string): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     mockConfigs[key] = value;
+    saveConfigsToStorage();
     return true;
   }
 
@@ -374,6 +332,7 @@ export class MockNavigationClient {
     await new Promise((resolve) => setTimeout(resolve, 200));
     if (key in mockConfigs) {
       delete mockConfigs[key];
+      saveConfigsToStorage();
       return true;
     }
     return false;
@@ -497,6 +456,11 @@ export class MockNavigationClient {
       Object.entries(data.configs).forEach(([key, value]) => {
         mockConfigs[key] = value;
       });
+
+      // 保存所有数据
+      saveGroupsToStorage();
+      saveSitesToStorage();
+      saveConfigsToStorage();
 
       return {
         success: true,
