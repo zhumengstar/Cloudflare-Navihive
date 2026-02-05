@@ -418,7 +418,7 @@ export default {
                                             `auth_token=${result.token}`,
                                             'HttpOnly',
                                             'Secure',
-                                            'SameSite=Strict',
+                                            'SameSite=Lax',
                                             `Max-Age=${maxAge}`,
                                             'Path=/',
                                         ].join('; '),
@@ -451,7 +451,7 @@ export default {
                                     'auth_token=',
                                     'HttpOnly',
                                     'Secure',
-                                    'SameSite=Strict',
+                                    'SameSite=Lax',
                                     'Max-Age=0',
                                     'Path=/',
                                 ].join('; '),
@@ -468,9 +468,11 @@ export default {
 
                     if (cookieHeader) {
                         const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-                            const [key, value] = cookie.trim().split('=');
-                            if (key && value) {
-                                acc[key] = value;
+                            const parts = cookie.trim().split('=');
+                            const key = parts[0];
+                            const value = parts.slice(1).join('=');
+                            if (key) {
+                                acc[key] = value || '';
                             }
                             return acc;
                         }, {} as Record<string, string>);
@@ -529,7 +531,9 @@ export default {
 
                     if (cookieHeader) {
                         const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-                            const [key, value] = cookie.trim().split('=');
+                            const parts = cookie.trim().split('=');
+                            const key = parts[0];
+                            const value = parts.slice(1).join('=');
                             if (key) {
                                 acc[key] = value || '';
                             }
