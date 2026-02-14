@@ -16,12 +16,6 @@ import {
   Divider,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
 } from '@mui/material';
 import {
   Language as LanguageIcon,
@@ -45,9 +39,6 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
   onDelete,
   open,
 }) => {
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-  const [itemToDelete, setItemToDelete] = React.useState<{ id: number; name: string } | null>(null);
-
   const showPanel = open && !!query && results.length > 0;
 
   // 高亮匹配文本
@@ -224,8 +215,7 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (onDelete) {
-                                    setItemToDelete({ id: result.id, name: result.name });
-                                    setDeleteConfirmOpen(true);
+                                    onDelete(result.id);
                                   }
                                 }}
                                 sx={{
@@ -265,39 +255,6 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
         </Paper>
       )}
 
-      {/* 删除确认对话框 - 独立于 Paper，不受 showPanel 影响 */}
-      <Dialog
-        open={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
-        aria-labelledby='delete-dialog-title'
-        aria-describedby='delete-dialog-description'
-      >
-        <DialogTitle id='delete-dialog-title'>确认删除</DialogTitle>
-        <DialogContent>
-          <DialogContentText id='delete-dialog-description'>
-            确定要删除 "{itemToDelete?.name}" 吗？此操作无法撤销。
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirmOpen(false)} color='inherit'>
-            取消
-          </Button>
-          <Button
-            onClick={() => {
-              if (itemToDelete && onDelete) {
-                onDelete(itemToDelete.id);
-              }
-              setDeleteConfirmOpen(false);
-              setItemToDelete(null);
-            }}
-            color='error'
-            variant='contained'
-            autoFocus
-          >
-            确认删除
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 };

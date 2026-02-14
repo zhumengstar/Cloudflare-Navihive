@@ -64,35 +64,53 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const prevQueryRef = useRef(query); // 记录上次搜索的查询内容
+
+  // 使用 Ref 保存最新的数据，防止 handleInternalSearch 因为数据变动而重新生成
+  const groupsRef = useRef(groups);
+  const sitesRef = useRef(sites);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+    sitesRef.current = sites;
+  }, [groups, sites]);
 
   // 处理站内搜索
   const handleInternalSearch = useCallback(
     (searchQuery: string) => {
+      // 总是从 ref 中读取最新的数据进行计算
+      const currentGroups = groupsRef.current;
+      const currentSites = sitesRef.current;
+
       if (!searchQuery.trim()) {
-        setResults([]);
-        setShowResults(false);
+        const allResults = searchInternal('', currentGroups, currentSites);
+        setResults(allResults.slice(0, 50));
+        setShowResults(true);
         return;
       }
 
-      const searchResults = searchInternal(searchQuery, groups, sites);
+      const searchResults = searchInternal(searchQuery, currentGroups, currentSites);
       setResults(searchResults);
       setShowResults(true);
     },
-    [groups, sites]
+    [] // 彻底稳定，不依赖任何外部变量
   );
 
   // 处理输入变化（带防抖）
   useEffect(() => {
     if (mode === 'internal') {
-      const timer = setTimeout(() => {
-        handleInternalSearch(query);
-      }, 300); // 300ms 防抖
-
-      return () => clearTimeout(timer);
+      // 只有当查询内容真正变化时才重新触发“自动”搜索
+      // 这可以防止因为全局 sites/groups 更新导致的其他副作用
+      if (query !== prevQueryRef.current) {
+        prevQueryRef.current = query;
+        const timer = setTimeout(() => {
+          handleInternalSearch(query);
+        }, 300); // 300ms 防抖
+        return () => clearTimeout(timer);
+      }
     } else {
       setShowResults(false);
     }
-
     return undefined;
   }, [query, mode, handleInternalSearch]);
 
@@ -161,6 +179,16 @@ const SearchBox: React.FC<SearchBoxProps> = ({
     onInternalResultClick?.(result);
   };
 
+  // 处理删除（乐观更新搜索列表）
+  const handleLocalDelete = (id: number) => {
+    // 立即从本地搜索结果列表中移除，实现无感删除
+    setResults(prev => prev.filter(item => item.id !== id));
+
+    // 调用父组件的删除逻辑处理真正的数据删除
+    // 注意：这里不需要再触发重搜索，因为界面已经通过乐观更新处理好了
+    onDelete?.(id);
+  };
+
   // 处理清空输入
   const handleClear = () => {
     setQuery('');
@@ -227,14 +255,10 @@ const SearchBox: React.FC<SearchBoxProps> = ({
     if (mode === 'internal') {
       if (!query.trim()) {
         // 空查询时显示所有站点（限制前 50 个以防卡顿）
-        const allResults = searchInternal('', groups, sites);
-        setResults(allResults.slice(0, 50));
-        setShowResults(true);
-      } else {
+        handleInternalSearch('');
+      } else if (!showResults) {
         // 非空时，如果面板未打开，重新触发搜索
-        if (!showResults) {
-          handleInternalSearch(query);
-        }
+        handleInternalSearch(query);
       }
     }
   };
@@ -375,7 +399,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           results={results}
           query={query}
           onResultClick={handleResultClick}
-          onDelete={onDelete}
+          onDelete={handleLocalDelete}
           open={showResults}
         />
       )}

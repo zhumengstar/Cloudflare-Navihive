@@ -524,9 +524,9 @@ const GroupCard: React.FC<GroupCardProps> = ({
         </Box>
       </Box>
 
-      {/* 使用 Collapse 组件包装站点卡片区域 */}
-      <Collapse in={!isCollapsed} timeout='auto'>
-        {renderSites()}
+      {/* 使用 Collapse 组件包装站点卡片区域，并实现按需渲染 */}
+      <Collapse in={!isCollapsed} timeout='auto' unmountOnExit>
+        {!isCollapsed && renderSites()}
       </Collapse>
 
       {/* 编辑分组弹窗 */}

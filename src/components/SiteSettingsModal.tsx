@@ -69,8 +69,6 @@ export default function SiteSettingsModal({
   // 验证错误
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // 删除确认状态
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 处理表单字段变化
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -150,19 +148,15 @@ export default function SiteSettingsModal({
     onClose();
   };
 
-  // 点击删除按钮
+  // 点击删除按钮 (直接执行删除，不再确认)
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowDeleteConfirm(true);
-  };
-
-  // 确认删除
-  const handleConfirmDelete = () => {
     if (site.id) {
       onDelete(site.id);
       onClose();
     }
   };
+
 
   // 计算首字母图标
   const fallbackIcon = formData.name?.charAt(0).toUpperCase() || 'A';
@@ -395,65 +389,34 @@ export default function SiteSettingsModal({
                 </Box>
               }
             />
-            {/* 删除确认警告 */}
-            {showDeleteConfirm && (
-              <Alert severity='warning'>
-                <Typography variant='body2'>
-                  确定要删除此网站吗？此操作无法撤销。
-                </Typography>
-              </Alert>
-            )}
           </Stack>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 1, justifyContent: 'space-between' }}>
-          {!showDeleteConfirm ? (
-            <Button
-              type="button"
-              onClick={handleDeleteClick}
-              color='error'
-              variant='contained'
-              startIcon={<DeleteIcon />}
-            >
-              删除
-            </Button>
-          ) : (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                onClick={() => setShowDeleteConfirm(false)}
-                color='inherit'
-                variant='outlined'
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
-                onClick={handleConfirmDelete}
-                color='error'
-                variant='contained'
-                startIcon={<DeleteIcon />}
-              >
-                确认删除
-              </Button>
-            </Box>
-          )}
+          <Button
+            type="button"
+            onClick={handleDeleteClick}
+            color='error'
+            variant='contained'
+            startIcon={<DeleteIcon />}
+          >
+            删除
+          </Button>
 
-          {!showDeleteConfirm && (
-            <Box>
-              <Button
-                onClick={onClose}
-                color='inherit'
-                variant='outlined'
-                sx={{ mr: 1.5 }}
-                startIcon={<CancelIcon />}
-              >
-                取消
-              </Button>
-              <Button type='submit' color='primary' variant='contained' startIcon={<SaveIcon />}>
-                保存
-              </Button>
-            </Box>
-          )}
+          <Box>
+            <Button
+              onClick={onClose}
+              color='inherit'
+              variant='outlined'
+              sx={{ mr: 1.5 }}
+              startIcon={<CancelIcon />}
+            >
+              取消
+            </Button>
+            <Button type='submit' color='primary' variant='contained' startIcon={<SaveIcon />}>
+              保存
+            </Button>
+          </Box>
         </DialogActions>
       </form>
     </Dialog>

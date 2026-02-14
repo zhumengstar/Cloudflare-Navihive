@@ -205,6 +205,9 @@ function App() {
   const [openConfig, setOpenConfig] = useState(false);
   const [tempConfigs, setTempConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
 
+  // 渐进式加载状态：初始显示的分组数量
+  const [visibleGroupsCount, setVisibleGroupsCount] = useState(5);
+
   // 登录界面状态
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
@@ -259,6 +262,7 @@ function App() {
   // 错误提示框状态
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('error');
   // 导入结果提示框状态
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importResultMessage, setImportResultMessage] = useState('');
@@ -472,10 +476,21 @@ function App() {
       setIsLoginOpen(true);
     }
 
-    // 确保初始化时重置排序状态
     setSortMode(SortMode.None);
     setCurrentSortingGroupId(null);
   }, []);
+
+  // 渐进式加载逻辑：逐步增加显示的分组数量，直到全部显示
+  useEffect(() => {
+    if (!loading && groups.length > visibleGroupsCount) {
+      const timer = setTimeout(() => {
+        // 每次增加 5 个，直到涵盖所有分组
+        setVisibleGroupsCount(prev => Math.min(prev + 5, groups.length));
+      }, 100); // 100ms 间隔，既能保证流畅度又能分批渲染
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [loading, groups.length, visibleGroupsCount]);
 
   // 设置文档标题
   useEffect(() => {
@@ -517,12 +532,20 @@ function App() {
 
   // 处理错误的函数
   const handleError = (errorMessage: string) => {
+    setSnackbarSeverity('error');
     setSnackbarMessage(errorMessage);
     setSnackbarOpen(true);
     console.error(errorMessage);
   };
 
-  // 关闭错误提示框
+  // 处理成功的函数
+  const handleSuccess = (successMessage: string) => {
+    setSnackbarSeverity('success');
+    setSnackbarMessage(successMessage);
+    setSnackbarOpen(true);
+  };
+
+  // 关闭提示框
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
   };
@@ -565,16 +588,27 @@ function App() {
 
   // 删除站点
   const handleSiteDelete = async (siteId: number) => {
+    // 记录旧状态以便回滚
+    const previousGroups = [...groups];
+
+    // 1. 乐观更新：立即从前端界面移除
+    setGroups((prevGroups) =>
+      prevGroups.map((group) => ({
+        ...group,
+        sites: group.sites.filter((site) => site.id !== siteId),
+      }))
+    );
+
     try {
+      // 2. 异步后台删除
       await api.deleteSite(siteId);
-      setGroups((prevGroups) =>
-        prevGroups.map((group) => ({
-          ...group,
-          sites: group.sites.filter((site) => site.id !== siteId),
-        }))
-      );
+
+      // 3. 响应删除完成（显示成功提示）
+      handleSuccess('书签已成功删除');
     } catch (error) {
       console.error('删除站点失败:', error);
+      // 回滚
+      setGroups(previousGroups);
       handleError('删除站点失败: ' + (error as Error).message);
     }
   };
@@ -1271,13 +1305,13 @@ function App() {
       {/* 错误提示 Snackbar */}
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={6000}
+        autoHideDuration={4000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert
           onClose={handleCloseSnackbar}
-          severity='error'
+          severity={snackbarSeverity}
           variant='filled'
           sx={{ width: '100%' }}
         >
@@ -1607,7 +1641,7 @@ function App() {
                         </SortableContext>
                       ) : (
                         <Box sx={{ '& > *': { mb: 5 } }}>
-                          {groups.map((group) => (
+                          {groups.slice(0, visibleGroupsCount).map((group) => (
                             <GroupCard
                               key={group.id}
                               group={group}
@@ -1626,6 +1660,11 @@ function App() {
                               draggedSiteId={draggedSiteId}
                             />
                           ))}
+                          {groups.length > visibleGroupsCount && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                              <CircularProgress size={24} />
+                            </Box>
+                          )}
                         </Box>
                       )}
 
