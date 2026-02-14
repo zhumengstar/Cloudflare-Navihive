@@ -53,11 +53,7 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
-  Menu,
-  MenuItem,
-  Divider,
-  ListItemIcon,
-  ListItemText,
+
   Snackbar,
   InputAdornment,
   Slider,
@@ -68,7 +64,7 @@ import {
   Fade,
   useScrollTrigger,
 } from '@mui/material';
-import SortIcon from '@mui/icons-material/Sort';
+
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import GitHubIcon from '@mui/icons-material/GitHub';
@@ -76,11 +72,8 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import MenuIcon from '@mui/icons-material/Menu';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 // 根据环境选择使用真实API还是模拟API
 // @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
@@ -249,10 +242,6 @@ function App() {
     is_public: 1, // 默认为公开
   });
 
-  // 新增菜单状态
-  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const openMenu = Boolean(menuAnchorEl);
-
   // 新增导入对话框状态
   const [openImport, setOpenImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -273,14 +262,6 @@ function App() {
   const [dragStartGroupId, setDragStartGroupId] = useState<number | null>(null);
 
   // 菜单打开关闭
-  const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setMenuAnchorEl(null);
-  };
-
   // 检查认证状态
   const checkAuthStatus = async () => {
     try {
@@ -428,7 +409,7 @@ function App() {
     await fetchData();
     await fetchConfigs();
 
-    handleMenuClose();
+
   };
 
   // 加载配置
@@ -686,7 +667,7 @@ function App() {
     console.log('开始分组排序');
     setSortMode(SortMode.GroupSort);
     setCurrentSortingGroupId(null);
-    handleMenuClose();
+
   };
 
   // 启动站点排序
@@ -694,7 +675,7 @@ function App() {
     console.log('开始站点排序');
     setSortMode(SortMode.SiteSort);
     setCurrentSortingGroupId(groupId);
-    handleMenuClose();
+
   };
 
   // 取消排序
@@ -745,7 +726,7 @@ function App() {
     console.log('开始跨分组拖动');
     setSortMode(SortMode.CrossGroupDrag);
     setCurrentSortingGroupId(null);
-    handleMenuClose();
+
   };
 
   // 处理跨分组拖拽的 DragOver 事件
@@ -1142,7 +1123,7 @@ function App() {
     setImportFile(null);
     setImportError(null);
     setOpenImport(true);
-    handleMenuClose();
+
   };
 
   const handleCloseImport = () => {
@@ -1529,64 +1510,6 @@ function App() {
                       >
                         新增分组
                       </Button>
-
-                      <Button
-                        variant='outlined'
-                        color='primary'
-                        startIcon={<MenuIcon />}
-                        onClick={handleMenuOpen}
-                        aria-controls={openMenu ? 'navigation-menu' : undefined}
-                        aria-haspopup='true'
-                        aria-expanded={openMenu ? 'true' : undefined}
-                        size='small'
-                        sx={{
-                          minWidth: 'auto',
-                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                        }}
-                      >
-                        更多选项
-                      </Button>
-                      <Menu
-                        id='navigation-menu'
-                        anchorEl={menuAnchorEl}
-                        open={openMenu}
-                        onClose={handleMenuClose}
-                        MenuListProps={{
-                          'aria-labelledby': 'navigation-button',
-                        }}
-                      >
-                        <MenuItem onClick={startGroupSort}>
-                          <ListItemIcon>
-                            <SortIcon fontSize='small' />
-                          </ListItemIcon>
-                          <ListItemText>编辑排序</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={startCrossGroupDrag}>
-                          <ListItemIcon>
-                            <SwapHorizIcon fontSize='small' />
-                          </ListItemIcon>
-                          <ListItemText>跨分组拖动</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={handleOpenConfig}>
-                          <ListItemIcon>
-                            <SettingsIcon fontSize='small' />
-                          </ListItemIcon>
-                          <ListItemText>网站设置</ListItemText>
-                        </MenuItem>
-                        <Divider />
-                        <MenuItem onClick={handleExportData}>
-                          <ListItemIcon>
-                            <FileDownloadIcon fontSize='small' />
-                          </ListItemIcon>
-                          <ListItemText>导出数据</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={handleOpenImport}>
-                          <ListItemIcon>
-                            <FileUploadIcon fontSize='small' />
-                          </ListItemIcon>
-                          <ListItemText>导入数据</ListItemText>
-                        </MenuItem>
-                      </Menu>
                     </>
                   )}
                 </>
@@ -1597,6 +1520,11 @@ function App() {
                   username={username}
                   onLogout={handleLogout}
                   onSiteRestored={handleSiteRestored}
+                  onStartGroupSort={startGroupSort}
+                  onStartCrossGroupDrag={startCrossGroupDrag}
+                  onOpenConfig={handleOpenConfig}
+                  onExportData={handleExportData}
+                  onOpenImport={handleOpenImport}
                   api={api}
                 />
               )}

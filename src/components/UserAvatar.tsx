@@ -27,9 +27,12 @@ import LockResetIcon from '@mui/icons-material/LockReset';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import SortIcon from '@mui/icons-material/Sort';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import SettingsIcon from '@mui/icons-material/Settings';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import RecycleBin from './RecycleBin';
-import { NavigationClient } from '../API/client';
-import { MockNavigationClient } from '../API/mock';
 import { Site } from '../API/http';
 
 interface UserAvatarProps {
@@ -37,12 +40,30 @@ interface UserAvatarProps {
     onLogout: () => void;
     onChangePassword?: (oldPassword: string, newPassword: string) => Promise<boolean>;
     onSiteRestored: (site: Site) => void;
+    onStartGroupSort: () => void;
+    onStartCrossGroupDrag: () => void;
+    onOpenConfig: () => void;
+    onExportData: () => void;
+    onOpenImport: () => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
 }
 
-const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePassword, onSiteRestored, api }) => {
+const UserAvatar: React.FC<UserAvatarProps> = ({
+    username,
+    onLogout,
+    onChangePassword,
+    onSiteRestored,
+    onStartGroupSort,
+    onStartCrossGroupDrag,
+    onOpenConfig,
+    onExportData,
+    onOpenImport,
+    api
+}) => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    // ... (keep existing state)
+
     const [infoOpen, setInfoOpen] = useState(false);
     const [changePwdOpen, setChangePwdOpen] = useState(false);
     const [recycleBinOpen, setRecycleBinOpen] = useState(false);
@@ -259,6 +280,38 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
                         <ListItemText>修改密码</ListItemText>
                     </MenuItem>
                 )}
+                <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }}>
+                    <ListItemIcon>
+                        <SortIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>编辑排序</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }}>
+                    <ListItemIcon>
+                        <SwapHorizIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>跨分组拖动</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }}>
+                    <ListItemIcon>
+                        <SettingsIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>网站设置</ListItemText>
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onExportData(); }}>
+                    <ListItemIcon>
+                        <FileDownloadIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>导出数据</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onOpenImport(); }}>
+                    <ListItemIcon>
+                        <FileUploadIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>导入数据</ListItemText>
+                </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogoutClick} sx={{ color: 'error.main' }}>
                     <ListItemIcon sx={{ color: 'error.main' }}>
