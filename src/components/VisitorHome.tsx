@@ -37,11 +37,16 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
     const [sites, setSites] = useState<RandomSite[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
 
     // 获取随机站点
-    const fetchRandomSites = async () => {
+    const fetchRandomSites = async (isInitial: boolean) => {
         try {
-            setLoading(true);
+            if (isInitial) {
+                setLoading(true);
+            } else {
+                setRefreshing(true);
+            }
             setError(null);
             const data = await api.getRandomSites(24);
             setSites(data);
@@ -50,11 +55,12 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
             setError('获取推荐内容失败，请稍后重试');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
     useEffect(() => {
-        fetchRandomSites();
+        fetchRandomSites(true);
     }, [api]);
 
     // 获取网站图标 URL
@@ -98,8 +104,8 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
                         variant="outlined"
                         size="large"
                         startIcon={<RefreshIcon />}
-                        onClick={fetchRandomSites}
-                        disabled={loading}
+                        onClick={() => fetchRandomSites(false)}
+                        disabled={refreshing}
                         sx={{ borderRadius: 2 }}
                     >
                         换一批
@@ -115,10 +121,10 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
             ) : error ? (
                 <Box sx={{ textAlign: 'center', py: 8 }}>
                     <Typography color="error">{error}</Typography>
-                    <Button onClick={fetchRandomSites} sx={{ mt: 2 }}>重试</Button>
+                    <Button onClick={() => fetchRandomSites(true)} sx={{ mt: 2 }}>重试</Button>
                 </Box>
             ) : (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1.5 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1.5, opacity: refreshing ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                     {sites.map((item, index) => (
                         <Box
                             key={`${item.site.id}-${index}`}

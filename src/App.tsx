@@ -334,18 +334,23 @@ function App() {
       const loginResponse = await api.login(username, password, rememberMe);
 
       if (loginResponse?.success) {
-        // 登录成功，切换到编辑模式
+        // 登录成功，立即切换状态并关闭登录界面
+        api.isAuthenticated = true; // 同步 API 客户端状态
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
         setUsername(username);
-
-        // 重新加载数据（包括私密内容）
-        await fetchData();
-        await fetchConfigs();
-
-        // 关闭登录界面
         setIsLoginOpen(false);
+        setLoginLoading(false);
+
+        // 单独加载数据，失败不影响登录成功状态
+        try {
+          await fetchData();
+          await fetchConfigs();
+        } catch (dataError) {
+          console.error('登录后加载数据失败:', dataError);
+          // 不回滚认证状态，仅提示数据加载问题
+        }
       } else {
         // 登录失败
         const message = loginResponse?.message || '用户名或密码错误';
@@ -353,7 +358,6 @@ function App() {
         setLoginError(message);
         setIsAuthenticated(false);
         setViewMode('readonly');
-        return;
       }
     } catch (error) {
       console.error('登录失败:', error);
@@ -375,7 +379,11 @@ function App() {
       const result = await api.register(username, password);
 
       if (result?.success) {
-        setRegisterSuccess(result.message || '注册成功，请返回登录');
+        setRegisterSuccess(result.message || '注册成功，正在自动登录...');
+        // 注册成功后自动登录
+        setTimeout(() => {
+          handleLogin(username, password, true);
+        }, 500);
       } else {
         setRegisterError(result?.message || '注册失败');
       }
@@ -421,10 +429,6 @@ function App() {
     await fetchConfigs();
 
     handleMenuClose();
-
-    // 显示提示信息
-    setSnackbarMessage('已退出登录，当前为访客模式');
-    setSnackbarOpen(true);
   };
 
   // 加载配置
@@ -1303,7 +1307,7 @@ function App() {
       {/* 错误提示 Snackbar */}
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={4000}
+        autoHideDuration={1000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
@@ -1347,7 +1351,7 @@ function App() {
           minHeight: '100vh',
           bgcolor: 'background.default',
           color: 'text.primary',
-          transition: 'all 0.3s ease-in-out',
+          transition: 'background-color 0.3s ease-in-out, color 0.3s ease-in-out',
           position: 'relative', // 添加相对定位，作为背景图片的容器
           overflow: 'hidden', // 防止背景图片溢出
         }}
