@@ -24,7 +24,8 @@ type FormMode = 'login' | 'register' | 'resetPassword';
 interface LoginFormProps {
   onLogin: (username: string, password: string, rememberMe: boolean) => void;
   onRegister: (username: string, password: string, email: string) => void;
-  onResetPassword: (username: string, newPassword: string) => void;
+  onResetPassword: (username: string, newPassword: string, code: string) => void; // 添加 code 参数
+  onSendCode: (username: string, email: string) => Promise<{ success: boolean; message?: string }>; // 新增发送验证码回调
   loading?: boolean;
   error?: string | null;
   registerLoading?: boolean;
@@ -39,6 +40,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   onLogin,
   onRegister,
   onResetPassword,
+  onSendCode, // 新增
   loading = false,
   error = null,
   registerLoading = false,
@@ -53,9 +55,12 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [code, setCode] = useState(''); // 新增验证码状态
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [codeSending, setCodeSending] = useState(false); // 发送状态
+  const [countdown, setCountdown] = useState(0); // 倒计时
 
   const resetForm = () => {
     setUsername('');
@@ -124,11 +129,47 @@ const LoginForm: React.FC<LoginFormProps> = ({
       }
       onRegister(username.trim(), password, email.trim());
     } else if (mode === 'resetPassword') {
+      if (!code.trim()) {
+        setLocalError('请输入验证码');
+        return;
+      }
       if (password !== confirmPassword) {
         setLocalError('两次输入的新密码不一致');
         return;
       }
-      onResetPassword(username.trim(), password);
+      onResetPassword(username.trim(), password, code.trim());
+    }
+  };
+
+  // 处理发送验证码
+  const handleSendCode = async () => {
+    const userErr = validateUsername();
+    if (userErr) { setLocalError(userErr); return; }
+    const emailErr = validateEmail();
+    if (emailErr) { setLocalError(emailErr); return; }
+
+    setCodeSending(true);
+    setLocalError(null);
+    try {
+      const result = await onSendCode(username.trim(), email.trim());
+      if (result.success) {
+        setCountdown(60);
+        const timer = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        setLocalError(result.message || '发送验证码失败');
+      }
+    } catch (err) {
+      setLocalError('网络错误，请稍后再试');
+    } finally {
+      setCodeSending(false);
     }
   };
 
@@ -249,7 +290,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
             disabled={isLoading}
             sx={{ mb: 2 }}
           />
-          {mode === 'register' && (
+          {(mode === 'register' || mode === 'resetPassword') && (
             <TextField
               margin='normal'
               required
@@ -264,6 +305,29 @@ const LoginForm: React.FC<LoginFormProps> = ({
               placeholder="example@domain.com"
               sx={{ mb: 2 }}
             />
+          )}
+
+          {mode === 'resetPassword' && (
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                required
+                fullWidth
+                id='code'
+                label='验证码'
+                name='code'
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                disabled={isLoading}
+              />
+              <Button
+                variant='outlined'
+                onClick={handleSendCode}
+                disabled={codeSending || countdown > 0 || isLoading}
+                sx={{ minWidth: 100 }}
+              >
+                {countdown > 0 ? `${countdown}s` : '获取验证码'}
+              </Button>
+            </Box>
           )}
           <TextField
             margin='normal'

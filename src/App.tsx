@@ -375,13 +375,13 @@ function App() {
   };
 
   // 密码重置功能
-  const handleResetPassword = async (username: string, newPassword: string) => {
+  const handleResetPassword = async (username: string, newPassword: string, code: string) => {
     try {
       setResetPasswordLoading(true);
       setResetPasswordError(null);
       setResetPasswordSuccess(null);
 
-      const result = await api.resetPassword(username, newPassword);
+      const result = await api.resetPassword(username, newPassword, code);
 
       if (result?.success) {
         setResetPasswordSuccess(result.message || '密码重置成功，请返回登录');
@@ -393,6 +393,16 @@ function App() {
       setResetPasswordError('密码重置失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setResetPasswordLoading(false);
+    }
+  };
+
+  // 发送重置验证码
+  const handleSendCode = async (username: string, email: string) => {
+    try {
+      return await api.sendResetCode(username, email);
+    } catch (error) {
+      console.error('发送验证码失败:', error);
+      return { success: false, message: '请求失败，请稍后重试' };
     }
   };
 
@@ -1275,6 +1285,7 @@ function App() {
           onLogin={handleLogin}
           onRegister={handleRegister}
           onResetPassword={handleResetPassword}
+          onSendCode={handleSendCode}
           loading={loginLoading}
           error={loginError}
           registerLoading={registerLoading}

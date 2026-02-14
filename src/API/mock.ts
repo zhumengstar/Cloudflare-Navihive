@@ -1,4 +1,4 @@
-import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites } from './http';
+import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites, SendCodeResponse } from './http';
 import { mockGroups as importedMockGroups, mockSites as importedMockSites, mockConfigs as importedMockConfigs } from './mockData';
 
 // 本地存储键名
@@ -123,13 +123,30 @@ export class MockNavigationClient {
   // 密码重置API
   async resetPassword(
     username: string,
-    newPassword: string
+    newPassword: string,
+    code: string
   ): Promise<ResetPasswordResponse> {
     await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log('模拟密码重置:', username, newPassword);
+    console.log('模拟密码重置:', username, newPassword, '验证码:', code);
+    if (code === '123456' || code.length === 6) { // 模拟校验逻辑
+      return {
+        success: true,
+        message: '密码重置成功(模拟环境)',
+      };
+    }
+    return {
+      success: false,
+      message: '验证码错误(模拟环境：请输入6位数字)',
+    };
+  }
+
+  // 发送重置验证码API
+  async sendResetCode(username: string, email: string): Promise<SendCodeResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log('模拟发送验证码:', username, email);
     return {
       success: true,
-      message: '密码重置成功(模拟环境)',
+      message: '验证码已发送(模拟环境: 123456)',
     };
   }
 

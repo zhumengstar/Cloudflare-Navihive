@@ -28,10 +28,19 @@
             "database_id": "2539afd9-931b-444b-8bc7-2e0816242ba8"
         }
     ],
+    // KV 命名空间绑定 - 用于存储验证码
+    "kv_namespaces": [
+        {
+            "binding": "KV",
+            "id": "code_store" // 建议用户在部署时替换为真实的 ID
+        }
+    ],
     "vars": {
         "AUTH_ENABLED": "true",
         "AUTH_USERNAME": "admin",
         "AUTH_PASSWORD": "$2a$10$QwZJF3Z1Rs729f7li9Wy3O9XkUvOSh9OBDY7EE4I9OrXKs1EUhG5O",
-        "AUTH_SECRET": "UKcwT_%H5H6dy3:Co@#ESR-EIB*L5B[("
+        "AUTH_SECRET": "UKcwT_%H5H6dy3:Co@#ESR-EIB*L5B[(",
+        "EMAIL_API_KEY": "", // 请在 resend.com 免费注册并填入 API Key
+        "EMAIL_FROM": "onboarding@resend.dev" // Resend 默认的免费发件人（测试用）
     }
 }

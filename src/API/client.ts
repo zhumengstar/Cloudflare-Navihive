@@ -1,4 +1,4 @@
-import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites } from './http';
+import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites, SendCodeResponse } from './http';
 export type { Site };
 
 export class NavigationClient {
@@ -66,13 +66,13 @@ export class NavigationClient {
   }
 
   // 密码重置API
-  async resetPassword(username: string, newPassword: string): Promise<ResetPasswordResponse> {
+  async resetPassword(username: string, newPassword: string, code: string): Promise<ResetPasswordResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username, newPassword }),
+        body: JSON.stringify({ username, newPassword, code }),
       });
 
       const data: ResetPasswordResponse = await response.json();
@@ -80,6 +80,24 @@ export class NavigationClient {
     } catch (error) {
       console.error('密码重置失败:', error);
       return { success: false, message: '密码重置请求失败，请检查网络连接' };
+    }
+  }
+
+  // 发送重置验证码API
+  async sendResetCode(username: string, email: string): Promise<SendCodeResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/send-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, email }),
+      });
+
+      const data: SendCodeResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error('发送验证码失败:', error);
+      return { success: false, message: '发送验证码请求失败，请检查网络连接' };
     }
   }
 

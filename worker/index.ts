@@ -493,40 +493,30 @@ export default {
                 // 密码重置路由 - 不需要验证，任何人可遍以重置
                 if (path === "reset-password" && method === "POST") {
                     try {
-                        // 速率限制检查
-                        /*
-                        // 速率限制检查
-                        const clientIP = request.headers.get('CF-Connecting-IP') ||
-                            request.headers.get('X-Forwarded-For') ||
-                            'unknown';
+                        const resetData = (await validateRequestBody(request)) as ResetPasswordRequest;
 
-                        if (!loginRateLimiter.check(clientIP)) {
-                            return createJsonResponse(
-                                {
-                                    success: false,
-                                    message: '操作过于频繁，请稍后再试 (15分钟内最多5次)',
-                                },
-                                request,
-                                { status: 429 }
-                            );
-                        }
-                        */
+                        // 验证校验由 NavigationAPI 处理
+                        const result = await api.resetPassword(resetData, env);
+                        return createJsonResponse(result, request, {
+                            status: result.success ? 200 : 400,
+                        });
+                    } catch (error) {
+                        return createJsonResponse(
+                            {
+                                success: false,
+                                message: error instanceof Error ? error.message : '请求无效',
+                            },
+                            request,
+                            { status: 400 }
+                        );
+                    }
+                }
 
-                        const resetData = (await validateRequestBody(request)) as ResetPasswordInput;
-
-                        const validation = validateResetPassword(resetData);
-                        if (!validation.valid) {
-                            return createJsonResponse(
-                                {
-                                    success: false,
-                                    message: `验证失败: ${validation.errors?.join(", ")}`,
-                                },
-                                request,
-                                { status: 400 }
-                            );
-                        }
-
-                        const result = await api.resetPassword(resetData as ResetPasswordRequest);
+                // 发送验证码路由
+                if (path === "auth/send-code" && method === "POST") {
+                    try {
+                        const sendCodeData = (await validateRequestBody(request)) as SendCodeRequest;
+                        const result = await api.sendResetCode(sendCodeData, env);
                         return createJsonResponse(result, request, {
                             status: result.success ? 200 : 400,
                         });

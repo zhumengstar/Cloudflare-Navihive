@@ -26,10 +26,13 @@ interface D1Result<T = unknown> {
 // 定义环境变量接口
 interface Env {
   DB: D1Database;
+  KV: any; // KV 命名空间
   AUTH_ENABLED?: string; // 是否启用身份验证
   AUTH_USERNAME?: string; // 认证用户名
   AUTH_PASSWORD?: string; // 认证密码哈希 (bcrypt)
   AUTH_SECRET?: string; // JWT密钥
+  EMAIL_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 // 数据类型定义
@@ -130,9 +133,21 @@ export interface RegisterResponse {
 export interface ResetPasswordRequest {
   username: string;
   newPassword: string;
+  code: string; // 新增验证码字段
 }
 
 export interface ResetPasswordResponse {
+  success: boolean;
+  message?: string;
+}
+
+// 发送验证码接口
+export interface SendCodeRequest {
+  email: string;
+  username: string;
+}
+
+export interface SendCodeResponse {
   success: boolean;
   message?: string;
 }
@@ -405,8 +420,21 @@ export class NavigationAPI {
   }
 
   // 重置密码
-  async resetPassword(request: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+  async resetPassword(request: ResetPasswordRequest, env?: Env): Promise<ResetPasswordResponse> {
     try {
+      // 1. 验证验证码
+      if (env && env.KV) {
+        const storedCode = await env.KV.get(`reset_code:${request.username}`);
+        if (!storedCode || storedCode !== request.code) {
+          return { success: false, message: '验证码无效或已过期' };
+        }
+        // 验证码使用后立即删除
+        await env.KV.delete(`reset_code:${request.username}`);
+      } else if (this.authEnabled) {
+        // 如果启用了认证但没有 KV，处于降级模式或本地开发未配置 KV
+        console.warn('KV 存储未配置，跳过验证码校验');
+      }
+
       // 查找用户
       const user = await this.db
         .prepare('SELECT id FROM users WHERE username = ?')
@@ -438,6 +466,99 @@ export class NavigationAPI {
     } catch (error) {
       console.error('密码重置失败:', error);
       return { success: false, message: '密码重置失败，请稍后重试' };
+    }
+  }
+
+  /**
+   * 发送重置密码验证码
+   */
+  async sendResetCode(request: SendCodeRequest, env: Env): Promise<SendCodeResponse> {
+    try {
+      // 1. 校验用户是否存在及其邮箱
+      const user = await this.db
+        .prepare('SELECT email FROM users WHERE username = ?')
+        .bind(request.username)
+        .first<{ email: string }>();
+
+      if (!user) {
+        return { success: false, message: '用户名不存在' };
+      }
+
+      if (!user.email || user.email.toLowerCase() !== request.email.toLowerCase()) {
+        return { success: false, message: '输入的邮箱与注册邮箱不匹配' };
+      }
+
+      // 2. 生成 6 位数字验证码
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // 3. 存储到 KV，有效期 10 分钟
+      if (env.KV) {
+        await env.KV.put(`reset_code:${request.username}`, code, { expirationTtl: 600 });
+      } else {
+        console.error('KV 绑定缺失');
+        return { success: false, message: '系统配置错误：KV 缺失' };
+      }
+
+      // 4. 发送邮件
+      const emailResult = await this.sendEmail(
+        request.email,
+        'NaviHive 密码重置验证码',
+        `您的重置密码验证码是：${code}。有效期为 10 分钟。如果您没有尝试重置密码，请忽略此邮件。`,
+        env
+      );
+
+      if (!emailResult) {
+        // 开发/调试模式：如果邮件发送失败且处于特定环境，可以从日志查看验证码
+        console.log(`[DEBUG] 验证码发送失败，当前生成的验证码为: ${code}`);
+        return { success: false, message: '验证码邮件发送失败，请稍后重试' };
+      }
+
+      return { success: true, message: '验证码已发送到您的邮箱' };
+    } catch (error) {
+      console.error('发送验证码失败:', error);
+      return { success: false, message: '发送验证码失败，请稍后重试' };
+    }
+  }
+
+  /**
+   * 辅助方法：发送验证码邮件
+   * 使用 Resend (每天 100 封免费额度，无需域名验证即可使用测试域名)
+   */
+  private async sendEmail(to: string, subject: string, content: string, env: Env): Promise<boolean> {
+    // 调试输出：即使邮件没发出去，你也能在控制台看到验证码
+    console.log(`[EMAIL DEBUG] 发送至: ${to}, 主题: ${subject}, 内容: ${content}`);
+
+    if (!env.EMAIL_API_KEY) {
+      console.warn('EMAIL_API_KEY 未配置，跳过真实邮件发送。');
+      // 注意：返回 false 意味着 API 会告诉前端发送失败，但你可以通过日志看到验证码
+      return false;
+    }
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${env.EMAIL_API_KEY}`,
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM || 'onboarding@resend.dev',
+          to: [to],
+          subject: subject,
+          text: content,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Resend API 调用失败:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Resend API 连接错误:', error);
+      return false;
     }
   }
 
