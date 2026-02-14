@@ -32,6 +32,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import SortableGroupItem from './components/SortableGroupItem';
+import PageSkeleton from './components/LoadingSkeleton';
 // Material UI 导入
 import {
   Container,
@@ -64,6 +65,7 @@ import {
   Switch,
   Fab,
   Zoom,
+  Fade,
   useScrollTrigger,
 } from '@mui/material';
 import SortIcon from '@mui/icons-material/Sort';
@@ -284,6 +286,9 @@ function App() {
       // 确保数据库已初始化
       await api.initDB();
 
+      // 这里先加载配置，因为配置决定了页面背景和标题，优先展示可以减少视觉突跳
+      await fetchConfigs();
+
       // 尝试进行API调用,检查是否需要认证
       const result = await api.checkAuthStatus();
       console.log('认证检查结果:', result);
@@ -291,50 +296,32 @@ function App() {
       if (!result) {
         // 未认证，设置为访客模式
         console.log('未认证，设置访客模式');
-
-        // 如果有token但无效，清除它
         if (api.isLoggedIn()) {
-          console.log('清除无效token');
           api.logout();
         }
-
-        // 设置为访客模式（可以查看公开内容）
         setIsAuthenticated(false);
-        setIsAuthRequired(false); // 允许访客访问
+        setIsAuthRequired(false);
         setViewMode('readonly');
-
-        // 加载公开数据
-        await fetchData();
-        await fetchConfigs();
       } else {
         // 已认证，设置为编辑模式
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
-        setUsername('admin'); // 默认用户名
-
-        // 加载所有数据（包括私密内容）
-        console.log('已认证，开始加载数据');
-        await fetchData();
-        await fetchConfigs();
+        setUsername('admin');
       }
+
+      // 统一在认证状态确定后加载业务数据
+      await fetchData();
+
     } catch (error) {
-      console.error('认证检查失败:', error);
-      // 出错时也允许访客访问
-      console.log('认证检查出错，设置访客模式');
+      console.error('认证检查及数据加载流程失败:', error);
       setIsAuthenticated(false);
       setIsAuthRequired(false);
       setViewMode('readonly');
 
-      // 尝试加载公开数据
-      try {
-        await fetchData();
-        await fetchConfigs();
-      } catch (e) {
-        console.error('加载公开数据失败:', e);
-      }
+      // 容错处理：尝试加载公开数据
+      await fetchData().catch(e => console.error('最终业务负载失败:', e));
     } finally {
-      console.log('认证检查完成');
       setIsAuthChecking(false);
     }
   };
@@ -1578,63 +1565,41 @@ function App() {
                 );
               })()}
 
-              {loading && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    height: '200px',
-                  }}
-                >
-                  <CircularProgress size={60} thickness={4} />
-                </Box>
+              {loading && groups.length === 0 && (
+                <PageSkeleton />
               )}
 
               {!loading && !error && (
-                <Box
-                  sx={{
-                    '& > *': { mb: 5 },
-                    minHeight: '100px',
-                  }}
-                >
-                  {sortMode === SortMode.GroupSort ? (
+                <Fade in={!loading} timeout={800}>
+                  <Box
+                    sx={{
+                      '& > *': { mb: 5 },
+                      minHeight: '100px',
+                    }}
+                  >
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
+                      onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
-                      onDragStart={handleDragStart}
-                    >
-                      <SortableContext
-                        items={groups.map((group) => group.id.toString())}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        <Stack
-                          spacing={2}
-                          sx={{
-                            '& > *': {
-                              transition: 'none',
-                            },
-                          }}
-                        >
-                          {groups.map((group) => (
-                            <SortableGroupItem key={group.id} id={group.id.toString()} group={group} />
-                          ))}
-                        </Stack>
-                      </SortableContext>
-                    </DndContext>
-                  ) : (
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragEnd={handleCrossGroupDragEnd}
                       onDragOver={handleSiteDragOver}
-                      onDragStart={handleDragStart}
                     >
-                      <Stack spacing={5}>
-                        {groups.map((group) => (
-                          <Box key={`group-${group.id}`} id={`group-${group.id}`}>
+                      {sortMode === SortMode.GroupSort ? (
+                        <SortableContext
+                          items={groups.map((group) => `group-${group.id}`)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Stack spacing={2}>
+                            {groups.map((group) => (
+                              <SortableGroupItem key={group.id} id={`group-${group.id}`} group={group} />
+                            ))}
+                          </Stack>
+                        </SortableContext>
+                      ) : (
+                        <Box sx={{ '& > *': { mb: 5 } }}>
+                          {groups.map((group) => (
                             <GroupCard
+                              key={group.id}
                               group={group}
                               sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
                               currentSortingGroupId={currentSortingGroupId}
@@ -1650,11 +1615,15 @@ function App() {
                               onSiteDragOver={handleSiteDragOver}
                               draggedSiteId={draggedSiteId}
                             />
-                          </Box>
-                        ))}
-                      </Stack>
-                      <DragOverlay dropAnimation={null}>
-                        {activeSite && (
+                          ))}
+                        </Box>
+                      )}
+
+                      <DragOverlay dropAnimation={{
+                        duration: 200,
+                        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                      }}>
+                        {activeSite ? (
                           <Box
                             sx={{
                               width: {
@@ -1665,25 +1634,22 @@ function App() {
                                 xl: 300,
                               },
                               padding: 1,
-                              boxSizing: 'border-box',
-                              cursor: 'grabbing',
-                              opacity: 0.95,
                             }}
                           >
                             <SiteCard
                               site={activeSite}
                               onUpdate={() => { }}
                               onDelete={() => { }}
-                              isEditMode={false}
+                              isEditMode={true}
                               viewMode={viewMode}
-                              iconApi={configs?.['site.iconApi']}
+                              iconApi={configs['site.iconApi']}
                             />
                           </Box>
-                        )}
+                        ) : null}
                       </DragOverlay>
                     </DndContext>
-                  )}
-                </Box>
+                  </Box>
+                </Fade>
               )}
 
             </>

@@ -54,31 +54,32 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
   const highlightText = (text: string, query: string) => {
     if (!text || !query) return text;
 
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    const index = lowerText.indexOf(lowerQuery);
-
-    if (index === -1) return text;
-
-    const before = text.slice(0, index);
-    const match = text.slice(index, index + query.length);
-    const after = text.slice(index + query.length);
+    // 转义正则特殊字符
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
 
     return (
       <>
-        {before}
-        <Box
-          component='span'
-          sx={{
-            backgroundColor: 'primary.main',
-            color: 'primary.contrastText',
-            padding: '0 2px',
-            borderRadius: '2px',
-          }}
-        >
-          {match}
-        </Box>
-        {after}
+        {parts.map((part, i) =>
+          part.toLowerCase() === query.toLowerCase() ? (
+            <Box
+              key={i}
+              component='span'
+              sx={{
+                backgroundColor: 'primary.main',
+                color: 'primary.contrastText',
+                padding: '0 2px',
+                borderRadius: '2px',
+                display: 'inline-block',
+                lineHeight: 1,
+              }}
+            >
+              {part}
+            </Box>
+          ) : (
+            <span key={i}>{part}</span>
+          )
+        )}
       </>
     );
   };
