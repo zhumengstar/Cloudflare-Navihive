@@ -14,6 +14,42 @@ import AIChatPanel from './components/AIChatPanel';
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
 import { SearchResultItem } from './utils/search';
 import './App.css';
+
+// 缓存相关的常量和辅助函数
+const CACHE_CONFIG_KEY = 'nav_configs_cache';
+const CACHE_DATA_KEY = 'nav_data_cache';
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24小时
+
+const saveToCache = (key: string, data: any) => {
+  try {
+    const cacheData = {
+      timestamp: Date.now(),
+      data: data
+    };
+    localStorage.setItem(key, JSON.stringify(cacheData));
+  } catch (e) {
+    console.warn('保存缓存失败:', e);
+  }
+};
+
+const loadFromCache = (key: string) => {
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+
+    const { timestamp, data } = JSON.parse(cached);
+    // 检查是否过期
+    if (Date.now() - timestamp > CACHE_EXPIRY) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.warn('尝试加载缓存失败:', e);
+    return null;
+  }
+};
+
 import {
   DndContext,
   closestCenter,
@@ -422,19 +458,28 @@ function App() {
 
   // 加载配置
   const fetchConfigs = async () => {
+    // 1. 先尝试从缓存加载以快速响应
+    const cachedConfigs = loadFromCache(CACHE_CONFIG_KEY);
+    if (cachedConfigs) {
+      setConfigs({ ...DEFAULT_CONFIGS, ...cachedConfigs });
+      setTempConfigs({ ...DEFAULT_CONFIGS, ...cachedConfigs });
+    }
+
     try {
       const configsData = await api.getConfigs();
-      setConfigs({
+      const finalConfigs = {
         ...DEFAULT_CONFIGS,
         ...configsData,
-      });
-      setTempConfigs({
-        ...DEFAULT_CONFIGS,
-        ...configsData,
-      });
+      };
+
+      setConfigs(finalConfigs);
+      setTempConfigs(finalConfigs);
+
+      // 保存到缓存
+      saveToCache(CACHE_CONFIG_KEY, configsData);
     } catch (error) {
       console.error('加载配置失败:', error);
-      // 使用默认配置
+      // 如果没有缓存也没有接口数据，使用默认配置（已经在初期状态中设置）
     }
   };
 
@@ -543,17 +588,40 @@ function App() {
   };
 
   const fetchData = async () => {
+    // 1. 实现 SWR (Stale-While-Revalidate) 策略
+    // 访客模式下尝试从缓存加载数据
+    if (viewMode === 'readonly') {
+      const cachedData = loadFromCache(CACHE_DATA_KEY);
+      if (cachedData) {
+        setGroups(cachedData);
+        // 如果有缓存，可以暂时关闭 loading
+        setLoading(false);
+      }
+    }
+
     try {
-      setLoading(true);
+      // 只有在没有缓存或者非只读模式时才强制开启 loading
+      if (viewMode !== 'readonly' || !localStorage.getItem(CACHE_DATA_KEY)) {
+        setLoading(true);
+      }
       setError(null);
 
       // 使用新的 getGroupsWithSites API 优化 N+1 查询问题
       const groupsWithSites = await api.getGroupsWithSites();
 
       setGroups(groupsWithSites);
+
+      // 只有在只读模式下才缓存业务数据
+      if (viewMode === 'readonly') {
+        saveToCache(CACHE_DATA_KEY, groupsWithSites);
+      }
     } catch (error) {
       console.error('加载数据失败:', error);
-      handleError('加载数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
+
+      // 仅在完全没有数据可显示时才弹出错误
+      if (groups.length === 0) {
+        handleError('加载数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      }
 
       // 如果因为认证问题导致加载失败，处理认证状态
       if (error instanceof Error && error.message.includes('认证')) {
