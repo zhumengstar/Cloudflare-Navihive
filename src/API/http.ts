@@ -1085,9 +1085,13 @@ export class NavigationAPI {
 
   async clickSite(id: number): Promise<boolean> {
     try {
+      // 生成北京时间 (UTC+8)
+      const now = new Date();
+      const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace('Z', '').split('.')[0];
+
       const result = await this.db
-        .prepare('UPDATE sites SET last_clicked_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .bind(id)
+        .prepare('UPDATE sites SET last_clicked_at = ? WHERE id = ?')
+        .bind(beijingTime, id)
         .run();
       return result.success;
     } catch (error) {

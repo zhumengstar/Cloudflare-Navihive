@@ -410,7 +410,10 @@ export class MockNavigationClient {
     if (index !== -1) {
       const site = mockSites[index];
       if (site) {
-        site.last_clicked_at = new Date().toISOString();
+        // 生成北京时间 (UTC+8)
+        const now = new Date();
+        const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().replace('Z', '');
+        site.last_clicked_at = beijingTime;
         saveSitesToStorage();
         return true;
       }
