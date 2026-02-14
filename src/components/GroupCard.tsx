@@ -4,21 +4,10 @@ import SiteCard from './SiteCard';
 import { GroupWithSites } from '../types';
 import EditGroupDialog from './EditGroupDialog';
 import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  DragOverEvent,
   useDroppable,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
-  sortableKeyboardCoordinates,
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
 // 引入Material UI组件
@@ -32,10 +21,14 @@ import {
   Collapse,
 } from '@mui/material';
 
-import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChecklistIcon from '@mui/icons-material/Checklist';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
+import DeselectIcon from '@mui/icons-material/Deselect';
+import CloseIcon from '@mui/icons-material/Close';
 
 // 可拖放的分组容器组件
 function DroppableGroupContainer({
@@ -92,36 +85,75 @@ interface GroupCardProps {
   viewMode?: 'readonly' | 'edit'; // 访问模式
   onUpdate: (updatedSite: Site) => void;
   onDelete: (siteId: number) => void;
-  onSaveSiteOrder: (groupId: number, sites: Site[]) => void;
+
   onStartSiteSort: (groupId: number) => void;
   onAddSite?: (groupId: number) => void; // 新增添加卡片的可选回调函数
   onUpdateGroup?: (group: Group) => void; // 更新分组的回调函数
   onDeleteGroup?: (groupId: number) => void; // 删除分组的回调函数
   configs?: Record<string, string>; // 传入配置
-  onSiteDragOver?: (event: DragOverEvent) => void; // 跨分组拖拽处理
+
   draggedSiteId?: string | null; // 当前拖拽的站点ID
+  onBatchDelete?: (siteIds: number[]) => void; // 新增：批量删除回调
 }
 
-const GroupCard: React.FC<GroupCardProps> = ({
+const GroupCard: React.FC<GroupCardProps> = React.memo(({
   group,
   sortMode,
   currentSortingGroupId,
   viewMode = 'edit', // 默认为编辑模式
   onUpdate,
   onDelete,
-  onSaveSiteOrder,
-  // onStartSiteSort, // 未使用
   onAddSite,
   onUpdateGroup,
   onDeleteGroup,
   configs,
-  onSiteDragOver,
   draggedSiteId,
+  onBatchDelete,
 }) => {
-  // 添加本地状态来管理站点排序
-  const [sites, setSites] = useState<Site[]>(group.sites);
   // 添加编辑弹窗的状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // 批量操作相关状态
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedSiteIds, setSelectedSiteIds] = useState<Set<number>>(new Set());
+
+  // 切换选中状态
+  const handleToggleSelection = (siteId: number) => {
+    setSelectedSiteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(siteId)) {
+        next.delete(siteId);
+      } else {
+        next.add(siteId);
+      }
+      return next;
+    });
+  };
+
+  // 全选/取消全选
+  const handleToggleSelectAll = () => {
+    if (selectedSiteIds.size === group.sites.length) {
+      setSelectedSiteIds(new Set());
+    } else {
+      setSelectedSiteIds(new Set(group.sites.map(s => s.id as number)));
+    }
+  };
+
+  // 退出批量模式
+  const handleExitBatchMode = () => {
+    setIsBatchMode(false);
+    setSelectedSiteIds(new Set());
+  };
+
+  // 执行批量删除
+  const handleBatchDeleteClick = () => {
+    if (selectedSiteIds.size === 0) return;
+    if (window.confirm(`确定要将选中的 ${selectedSiteIds.size} 个书签移入回收站吗？`)) {
+      if (onBatchDelete) {
+        onBatchDelete(Array.from(selectedSiteIds));
+        handleExitBatchMode();
+      }
+    }
+  };
 
   // 添加折叠状态
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -141,43 +173,6 @@ const GroupCard: React.FC<GroupCardProps> = ({
   // 处理折叠切换
   const handleToggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
-  };
-
-  // 配置传感器，支持鼠标、触摸和键盘操作
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // 5px 的移动才激活拖拽，防止误触
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 250, // 延迟250ms激活，防止误触
-        tolerance: 5, // 容忍5px的移动
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // 站点拖拽结束处理函数
-  const handleSiteDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (!over) return;
-
-    if (active.id !== over.id) {
-      // 查找拖拽的站点索引
-      const oldIndex = sites.findIndex((site) => `site-${site.id}` === active.id);
-      const newIndex = sites.findIndex((site) => `site-${site.id}` === over.id);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        // 更新本地站点顺序
-        const newSites = arrayMove(sites, oldIndex, newIndex);
-        setSites(newSites);
-      }
-    }
   };
 
   // 编辑分组处理函数
@@ -210,16 +205,17 @@ const GroupCard: React.FC<GroupCardProps> = ({
 
   // 渲染站点卡片区域
   const renderSites = () => {
-    // 使用本地状态中的站点数据
-    const sitesToRender = isCurrentEditingGroup ? sites : group.sites;
+    // 使用来自父组件的 group.sites 数据
+    const sitesToRender = group.sites;
 
     // 如果当前不是正在编辑的分组且处于站点排序模式，不显示站点
     if (!isCurrentEditingGroup && sortMode === 'SiteSort') {
       return null;
     }
 
-    // 跨分组拖动模式：所有分组都显示站点并启用拖动
-    if (sortMode === 'CrossGroupDrag') {
+    // 跨分组拖动模式 或 编辑模式
+    // 编辑模式下不再需要嵌套 DndContext，因为 App.tsx 的顶层 DndContext 会处理
+    if (isCurrentEditingGroup || sortMode === 'CrossGroupDrag') {
       return (
         <DroppableGroupContainer
           groupId={group.id}
@@ -260,71 +256,15 @@ const GroupCard: React.FC<GroupCardProps> = ({
                       viewMode={viewMode}
                       index={idx}
                       iconApi={configs?.['site.iconApi']}
+                      isBatchMode={isBatchMode}
+                      isSelected={selectedSiteIds.has(site.id as number)}
+                      onToggleSelection={handleToggleSelection}
                     />
                   </Box>
                 ))}
               </Box>
             </Box>
           </SortableContext>
-        </DroppableGroupContainer>
-      );
-    }
-
-    // 如果是编辑模式，使用DndContext包装
-    if (isCurrentEditingGroup) {
-      return (
-        <DroppableGroupContainer
-          groupId={group.id}
-          isDraggingOver={isDraggingOverThisGroup}
-        >
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleSiteDragEnd}
-            onDragOver={onSiteDragOver}
-          >
-            <SortableContext
-              items={sitesToRender.map((site) => `site-${site.id}`)}
-              strategy={rectSortingStrategy}
-            >
-              <Box sx={{ width: '100%' }}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    margin: -1, // 抵消内部padding，确保边缘对齐
-                  }}
-                >
-                  {sitesToRender.map((site, idx) => (
-                    <Box
-                      key={site.id || idx}
-                      sx={{
-                        width: {
-                          xs: '50%',
-                          sm: '33.33%',
-                          md: '25%',
-                          lg: '16.666%',
-                          xl: '16.666%',
-                        },
-                        padding: 1, // 内部间距，更均匀的分布
-                        boxSizing: 'border-box', // 确保padding不影响宽度计算
-                      }}
-                    >
-                      <SiteCard
-                        site={site}
-                        onUpdate={onUpdate}
-                        onDelete={onDelete}
-                        isEditMode={true}
-                        viewMode={viewMode}
-                        index={idx}
-                        iconApi={configs?.['site.iconApi']} // 传入iconApi配置
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            </SortableContext>
-          </DndContext>
         </DroppableGroupContainer>
       );
     }
@@ -359,7 +299,10 @@ const GroupCard: React.FC<GroupCardProps> = ({
               onDelete={onDelete}
               isEditMode={false}
               viewMode={viewMode}
-              iconApi={configs?.['site.iconApi']} // 传入iconApi配置
+              iconApi={configs?.['site.iconApi']}
+              isBatchMode={isBatchMode}
+              isSelected={selectedSiteIds.has(site.id as number)}
+              onToggleSelection={handleToggleSelection}
             />
           </Box>
         ))}
@@ -367,14 +310,7 @@ const GroupCard: React.FC<GroupCardProps> = ({
     );
   };
 
-  // 保存站点排序
-  const handleSaveSiteOrder = () => {
-    if (!group.id) {
-      console.error('分组 ID 不存在,无法保存排序');
-      return;
-    }
-    onSaveSiteOrder(group.id, sites);
-  };
+
 
 
 
@@ -471,37 +407,79 @@ const GroupCard: React.FC<GroupCardProps> = ({
           }}
         >
           {isCurrentEditingGroup ? (
-            <Button
-              variant='contained'
+            <Typography
+              variant='body2'
               color='primary'
-              size='small'
-              startIcon={<SaveIcon />}
-              onClick={handleSaveSiteOrder}
-              sx={{
-                minWidth: 'auto',
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-              }}
+              sx={{ alignSelf: 'center', fontWeight: 'bold' }}
             >
-              保存顺序
-            </Button>
+              正在排序... (已自动保存)
+            </Typography>
           ) : (
             sortMode === 'None' &&
             viewMode === 'edit' && ( // 只在编辑模式显示按钮
               <>
-                {onAddSite && group.id && (
-                  <Button
-                    variant='contained'
-                    color='primary'
-                    size='small'
-                    onClick={() => onAddSite(group.id)}
-                    startIcon={<AddIcon />}
-                    sx={{
-                      minWidth: 'auto',
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                    }}
-                  >
-                    添加卡片
-                  </Button>
+                {/* 批量操作控制 */}
+                {isBatchMode ? (
+                  <>
+                    <Button
+                      variant='outlined'
+                      color='primary'
+                      size='small'
+                      onClick={handleToggleSelectAll}
+                      startIcon={selectedSiteIds.size === group.sites.length ? <DeselectIcon /> : <SelectAllIcon />}
+                    >
+                      {selectedSiteIds.size === group.sites.length ? '取消全选' : '全选'}
+                    </Button>
+                    <Button
+                      variant='contained'
+                      color='error'
+                      size='small'
+                      onClick={handleBatchDeleteClick}
+                      disabled={selectedSiteIds.size === 0}
+                      startIcon={<DeleteSweepIcon />}
+                    >
+                      删除选中 ({selectedSiteIds.size})
+                    </Button>
+                    <Button
+                      variant='outlined'
+                      color='inherit'
+                      size='small'
+                      onClick={handleExitBatchMode}
+                      startIcon={<CloseIcon />}
+                    >
+                      取消
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant='outlined'
+                      color='primary'
+                      size='small'
+                      onClick={() => setIsBatchMode(true)}
+                      startIcon={<ChecklistIcon />}
+                      sx={{
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      }}
+                    >
+                      批量操作
+                    </Button>
+                    {onAddSite && group.id && (
+                      <Button
+                        variant='contained'
+                        color='primary'
+                        size='small'
+                        onClick={() => onAddSite(group.id)}
+                        startIcon={<AddIcon />}
+                        sx={{
+                          minWidth: 'auto',
+                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        }}
+                      >
+                        添加卡片
+                      </Button>
+                    )}
+                  </>
                 )}
                 {/* 移除排序按钮 */}
                 {/* <Button ... 排序 /> */}
@@ -543,6 +521,6 @@ const GroupCard: React.FC<GroupCardProps> = ({
 
     </Paper>
   );
-};
+});
 
 export default GroupCard;

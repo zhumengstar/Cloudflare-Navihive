@@ -387,6 +387,57 @@ export class MockNavigationClient {
     return true;
   }
 
+  async deleteSites(ids: number[]): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    for (const id of ids) {
+      const index = mockSites.findIndex((s) => s.id === id);
+      if (index !== -1) {
+        const existing = mockSites[index];
+        if (existing) {
+          mockSites[index] = {
+            ...existing,
+            is_deleted: 1,
+            deleted_at: new Date().toISOString()
+          };
+        }
+      }
+    }
+    saveSitesToStorage();
+    return true;
+  }
+
+  async deleteSitesPermanently(ids: number[]): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    for (const id of ids) {
+      const index = mockSites.findIndex((s) => s.id === id);
+      if (index !== -1) {
+        mockSites.splice(index, 1);
+      }
+    }
+    saveSitesToStorage();
+    return true;
+  }
+
+  async restoreSites(ids: number[]): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    for (const id of ids) {
+      const index = mockSites.findIndex((s) => s.id === id);
+      if (index !== -1) {
+        const existing = mockSites[index];
+        if (existing) {
+          mockSites[index] = {
+            ...existing,
+            is_deleted: 0,
+            deleted_at: undefined,
+            updated_at: new Date().toISOString(),
+          };
+        }
+      }
+    }
+    saveSitesToStorage();
+    return true;
+  }
+
   async updateGroupOrder(groupOrders: { id: number; order_num: number }[]): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     for (const order of groupOrders) {

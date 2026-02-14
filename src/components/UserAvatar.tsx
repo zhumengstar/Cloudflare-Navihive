@@ -25,6 +25,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import EmailIcon from '@mui/icons-material/Email';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import SortIcon from '@mui/icons-material/Sort';
@@ -32,6 +33,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
+import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import RecycleBin from './RecycleBin';
 import { Site } from '../API/http';
 
@@ -39,12 +41,13 @@ interface UserAvatarProps {
     username: string;
     onLogout: () => void;
     onChangePassword?: (oldPassword: string, newPassword: string) => Promise<boolean>;
-    onSiteRestored: (site: Site) => void;
+    onSiteRestored: (site: Site | Site[]) => void;
     onStartGroupSort: () => void;
     onStartCrossGroupDrag: () => void;
     onOpenConfig: () => void;
     onExportData: () => void;
     onOpenImport: () => void;
+    onOpenAddGroup: () => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
 }
@@ -59,6 +62,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     onOpenConfig,
     onExportData,
     onOpenImport,
+    onOpenAddGroup,
     api
 }) => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -73,6 +77,11 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     const [changePwdLoading, setChangePwdLoading] = useState(false);
     const [changePwdError, setChangePwdError] = useState<string | null>(null);
     const [changePwdSuccess, setChangePwdSuccess] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string>('');
+    const [infoLoading, setInfoLoading] = useState(false);
+    const [isEditingEmail, setIsEditingEmail] = useState(false);
+    const [editEmail, setEditEmail] = useState('');
+    const [updateLoading, setUpdateLoading] = useState(false);
 
     const menuOpen = Boolean(anchorEl);
 
@@ -84,13 +93,57 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         setAnchorEl(null);
     };
 
-    const handleInfoOpen = () => {
+    const handleInfoOpen = async () => {
         handleMenuClose();
         setInfoOpen(true);
+        setInfoLoading(true);
+        try {
+            // 需要后端提供获取当前用户信息的接口，或者从 props 传递
+            // 这里假设通过 api 获取，如果没实现则捕获错误
+            const profile = await api.getUserProfile?.();
+            if (profile && profile.email) {
+                setUserEmail(profile.email);
+            } else {
+                // 回退：如果 getUserProfile 未实现，尝试获取全部配置看是否有相关信息
+                // 或者在组件挂载时通过 props 传进来更合适。
+                // 暂时这里留空，稍后检查 API 定义
+            }
+        } catch (error) {
+            console.error("Failed to fetch user email:", error);
+        } finally {
+            setInfoLoading(false);
+        }
     };
 
     const handleInfoClose = () => {
         setInfoOpen(false);
+        setIsEditingEmail(false);
+    };
+
+    const handleUpdateEmail = async () => {
+        if (!editEmail.trim()) {
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail.trim())) {
+            alert('请输入有效的邮箱地址');
+            return;
+        }
+
+        setUpdateLoading(true);
+        try {
+            const result = await api.updateUserProfile({ email: editEmail.trim() });
+            if (result.success) {
+                setUserEmail(editEmail.trim());
+                setIsEditingEmail(false);
+            } else {
+                alert(result.message || '更新邮箱失败');
+            }
+        } catch (error) {
+            console.error('Failed to update email:', error);
+            alert('更新邮箱失败');
+        } finally {
+            setUpdateLoading(false);
+        }
     };
 
     const handleChangePwdOpen = () => {
@@ -155,7 +208,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         setRecycleBinOpen(false);
     };
 
-    const handleRestoreSite = (site: Site) => {
+    const handleRestoreSite = (site: Site | Site[]) => {
         if (onSiteRestored) {
             onSiteRestored(site);
         }
@@ -281,17 +334,23 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                     </MenuItem>
                 )}
                 <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onOpenAddGroup(); }}>
+                    <ListItemIcon>
+                        <CreateNewFolderIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>新增分组</ListItemText>
+                </MenuItem>
                 <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }}>
                     <ListItemIcon>
                         <SortIcon fontSize='small' />
                     </ListItemIcon>
-                    <ListItemText>编辑排序</ListItemText>
+                    <ListItemText>分组排序</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }}>
                     <ListItemIcon>
                         <SwapHorizIcon fontSize='small' />
                     </ListItemIcon>
-                    <ListItemText>跨分组拖动</ListItemText>
+                    <ListItemText>书签拖动</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }}>
                     <ListItemIcon>
@@ -347,7 +406,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 mb: 1.5,
                             }}
                         >
-                            {getAvatarLetter()}
+                            {infoLoading ? <CircularProgress size={40} /> : getAvatarLetter()}
                         </Avatar>
                         <Typography variant='h6' fontWeight='bold'>
                             {username}
@@ -365,6 +424,57 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                                 secondaryTypographyProps={{ variant: 'body1' }}
                             />
+                        </ListItem>
+                        <ListItem disablePadding sx={{ py: 0.5 }}>
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                <EmailIcon fontSize='small' color='action' />
+                            </ListItemIcon>
+                            {isEditingEmail ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 1 }}>
+                                    <TextField
+                                        size="small"
+                                        fullWidth
+                                        value={editEmail}
+                                        onChange={(e) => setEditEmail(e.target.value)}
+                                        placeholder="example@domain.com"
+                                        disabled={updateLoading}
+                                        autoFocus
+                                    />
+                                    <Button
+                                        size="small"
+                                        variant="contained"
+                                        onClick={handleUpdateEmail}
+                                        disabled={updateLoading || !editEmail.trim() || editEmail === userEmail}
+                                    >
+                                        保存
+                                    </Button>
+                                    <Button
+                                        size="small"
+                                        onClick={() => setIsEditingEmail(false)}
+                                        disabled={updateLoading}
+                                    >
+                                        取消
+                                    </Button>
+                                </Box>
+                            ) : (
+                                <>
+                                    <ListItemText
+                                        primary='电子邮箱'
+                                        secondary={userEmail || '未设置'}
+                                        primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+                                        secondaryTypographyProps={{ variant: 'body1' }}
+                                    />
+                                    <Button
+                                        size="small"
+                                        onClick={() => {
+                                            setEditEmail(userEmail);
+                                            setIsEditingEmail(true);
+                                        }}
+                                    >
+                                        修改
+                                    </Button>
+                                </>
+                            )}
                         </ListItem>
                         <ListItem disablePadding sx={{ py: 0.5 }}>
                             <ListItemIcon sx={{ minWidth: 36 }}>

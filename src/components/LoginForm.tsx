@@ -23,7 +23,7 @@ type FormMode = 'login' | 'register' | 'resetPassword';
 
 interface LoginFormProps {
   onLogin: (username: string, password: string, rememberMe: boolean) => void;
-  onRegister: (username: string, password: string) => void;
+  onRegister: (username: string, password: string, email: string) => void;
   onResetPassword: (username: string, newPassword: string) => void;
   loading?: boolean;
   error?: string | null;
@@ -50,6 +50,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
 }) => {
   const [mode, setMode] = useState<FormMode>('login');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -58,6 +59,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
   const resetForm = () => {
     setUsername('');
+    setEmail('');
     setPassword('');
     setConfirmPassword('');
     setRememberMe(true);
@@ -76,6 +78,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
     if (username.trim().length > 32) return '用户名长度不能超过32个字符';
     if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(username.trim())) {
       return '用户名只能包含字母、数字、下划线和中文';
+    }
+    return null;
+  };
+
+  // 通用校验：邮箱
+  const validateEmail = (): string | null => {
+    if (!email.trim()) return '邮箱不能为空';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return '请输入有效的邮箱地址';
     }
     return null;
   };
@@ -103,11 +114,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
     if (mode === 'login') {
       onLogin(username.trim(), password, rememberMe);
     } else if (mode === 'register') {
+      // 校验邮箱
+      const emailErr = validateEmail();
+      if (emailErr) { setLocalError(emailErr); return; }
+
       if (password !== confirmPassword) {
         setLocalError('两次输入的密码不一致');
         return;
       }
-      onRegister(username.trim(), password);
+      onRegister(username.trim(), password, email.trim());
     } else if (mode === 'resetPassword') {
       if (password !== confirmPassword) {
         setLocalError('两次输入的新密码不一致');
@@ -234,6 +249,22 @@ const LoginForm: React.FC<LoginFormProps> = ({
             disabled={isLoading}
             sx={{ mb: 2 }}
           />
+          {mode === 'register' && (
+            <TextField
+              margin='normal'
+              required
+              fullWidth
+              id='email'
+              label='邮箱地址'
+              name='email'
+              autoComplete='email'
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={isLoading}
+              placeholder="example@domain.com"
+              sx={{ mb: 2 }}
+            />
+          )}
           <TextField
             margin='normal'
             required

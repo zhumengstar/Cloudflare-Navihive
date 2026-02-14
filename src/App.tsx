@@ -65,12 +65,10 @@ import {
   useScrollTrigger,
 } from '@mui/material';
 
-import SaveIcon from '@mui/icons-material/Save';
+
 import CancelIcon from '@mui/icons-material/Cancel';
 import GitHubIcon from '@mui/icons-material/GitHub';
-import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
-import SettingsIcon from '@mui/icons-material/Settings';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -351,13 +349,13 @@ function App() {
   };
 
   // 注册功能
-  const handleRegister = async (username: string, password: string) => {
+  const handleRegister = async (username: string, password: string, email: string) => {
     try {
       setRegisterLoading(true);
       setRegisterError(null);
       setRegisterSuccess(null);
 
-      const result = await api.register(username, password);
+      const result = await api.register(username, password, email);
 
       if (result?.success) {
         setRegisterSuccess(result.message || '注册成功，正在自动登录...');
@@ -597,37 +595,7 @@ function App() {
     }
   };
 
-  // 保存分组排序
-  const handleSaveGroupOrder = async () => {
-    try {
-      console.log('保存分组顺序', groups);
-      // 构造需要更新的分组顺序数据
-      const groupOrders = groups.map((group, index) => ({
-        id: group.id as number, // 断言id为number类型
-        order_num: index,
-      }));
 
-      // 调用API更新分组顺序
-      const result = await api.updateGroupOrder(groupOrders);
-
-      if (result) {
-        console.log('分组排序更新成功');
-        // 重新获取最新数据
-        // 重新获取最新数据
-        // await fetchData();
-      } else {
-        throw new Error('分组排序更新失败');
-      }
-
-
-
-      // setSortMode(SortMode.None);
-      // setCurrentSortingGroupId(null);
-    } catch (error) {
-      console.error('更新分组排序失败:', error);
-      handleError('更新分组排序失败: ' + (error as Error).message);
-    }
-  };
 
   // 保存站点排序
   const handleSaveSiteOrder = async (groupId: number, sites: Site[]) => {
@@ -685,38 +653,64 @@ function App() {
   };
 
   // 处理站点恢复
-  const handleSiteRestored = (site: Site) => {
+  const handleSiteRestored = (siteOrSites: Site | Site[]) => {
+    const sitesToRestore = Array.isArray(siteOrSites) ? siteOrSites : [siteOrSites];
+    if (sitesToRestore.length === 0) return;
+
     setGroups((prevGroups) => {
-      // 找到归属分组
-      const groupIndex = prevGroups.findIndex((g) => g.id === site.group_id);
-      if (groupIndex === -1) {
-        // 如果找不到分组，可能是分组也被删除了或者数据不同步，此时回退到刷新整个列表
-        fetchData();
-        return prevGroups;
+      const newGroups = [...prevGroups];
+      let updated = false;
+
+      // 按分组 ID 对要恢复的站点进行归类
+      const sitesByGroup = sitesToRestore.reduce((acc, site) => {
+        if (site.group_id) {
+          if (!acc[site.group_id]) acc[site.group_id] = [];
+          acc[site.group_id].push(site);
+        }
+        return acc;
+      }, {} as Record<number, Site[]>);
+
+      for (const [groupIdStr, sites] of Object.entries(sitesByGroup)) {
+        const groupId = Number(groupIdStr);
+        const groupIndex = newGroups.findIndex((g) => g.id === groupId);
+
+        if (groupIndex !== -1) {
+          const targetGroup = { ...newGroups[groupIndex] };
+          const existingSites = targetGroup.sites ? [...targetGroup.sites] : [];
+          let groupUpdated = false;
+
+          for (const site of sites) {
+            if (!existingSites.find((s) => s.id === site.id)) {
+              existingSites.push(site);
+              groupUpdated = true;
+            }
+          }
+
+          if (groupUpdated) {
+            existingSites.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+            targetGroup.sites = existingSites;
+            newGroups[groupIndex] = targetGroup as GroupWithSites;
+            updated = true;
+          }
+        } else {
+          // 如果找不到分组，可能是数据不同步，标记需要刷新
+          updated = false;
+          fetchData();
+          return prevGroups;
+        }
       }
 
-      // 创建新分组列表副本
-      const newGroups = [...prevGroups];
-      const targetGroup = { ...newGroups[groupIndex] };
-
-      // 确保 sites 数组存在
-      const sites = targetGroup.sites ? [...targetGroup.sites] : [];
-
-      // 检查是否已存在（避免重复添加）
-      if (!sites.find(s => s.id === site.id)) {
-        sites.push(site);
-        // 按 order_num 排序
-        sites.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
-
-        targetGroup.sites = sites;
-        newGroups[groupIndex] = targetGroup as GroupWithSites;
-
-        setSnackbarMessage(`已恢复站点: ${site.name}`);
+      if (updated) {
+        setSnackbarMessage(
+          Array.isArray(siteOrSites)
+            ? `已批量恢复 ${siteOrSites.length} 个站点`
+            : `已恢复站点: ${siteOrSites?.name || ''}`
+        );
         setSnackbarSeverity('success');
         setSnackbarOpen(true);
-
         return newGroups;
       }
+
       return prevGroups;
     });
   };
@@ -758,63 +752,63 @@ function App() {
 
     if (!overGroupId || activeGroup.id === overGroupId) return;
 
+    const overSiteId = overId.startsWith('site-') ? parseInt(overId.replace('site-', '')) : null;
+
     // 移动站点以显示占位
     setGroups((prev) => {
-      const newGroups = prev.map(g => ({ ...g, sites: [...g.sites] }));
-      const source = newGroups.find(g => g.id === activeGroup.id);
-      const target = newGroups.find(g => g.id === overGroupId);
+      // 找到源分组和目标分组
+      const sourceIndex = prev.findIndex(g => g.sites.some(s => s.id === activeSiteId));
+      const targetIndex = overId.startsWith('group-')
+        ? prev.findIndex(g => g.id === overGroupId)
+        : prev.findIndex(g => g.sites.some(s => s.id === overSiteId));
+
+      if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+      const source = prev[sourceIndex];
+      const target = prev[targetIndex];
 
       if (!source || !target) return prev;
+
+      // 如果源和目标相同，且是 site-to-site，dnd-kit-sortable 会处理，这里不处理
+      if (sourceIndex === targetIndex) return prev;
 
       const siteIndex = source.sites.findIndex(s => s.id === activeSiteId);
       if (siteIndex === -1) return prev;
 
-      const [movedSite] = source.sites.splice(siteIndex, 1);
-      if (!movedSite) return prev;
-      movedSite.group_id = target.id;
+      // 仅在真正发生跨组变化或位置变化时更新状态
+      const movedSite = source.sites[siteIndex];
 
-      let insertIndex = target.sites.length;
+      // 创建新数组，仅克隆受影响的分组
+      const newGroups = [...prev];
+
+      // 更新源分组：移除站点
+      const newSourceSites = [...source.sites];
+      newSourceSites.splice(siteIndex, 1);
+      newGroups[sourceIndex] = { ...source, sites: newSourceSites } as any;
+
+      // 更新目标分组：插入站点
+      const newTargetSites = [...target.sites];
+      const siteToInsert = { ...movedSite, group_id: target.id as number } as any;
+
+      let insertIndex = newTargetSites.length;
       if (overId.startsWith('site-')) {
-        const overSiteId = parseInt(overId.replace('site-', ''));
-        const idx = target.sites.findIndex(s => s.id === overSiteId);
+        const idx = newTargetSites.findIndex(s => s.id === overSiteId);
         if (idx !== -1) {
-          // 判断插入位置：使用中心点判断 (Sorting Method)
-          // 比较 active 和 over 的中心点位置
           const activeRect = active.rect.current.translated;
           const overRect = over.rect;
-
           if (activeRect && overRect) {
-            const activeCenterY = activeRect.top + activeRect.height / 2;
-            const overCenterY = overRect.top + overRect.height / 2;
-
-            const activeCenterX = activeRect.left + activeRect.width / 2;
-            const overCenterX = overRect.left + overRect.width / 2;
-
-            // 简单的中心点比较逻辑，适配 Grid 布局
-            // 如果 Y 轴中心点差异明显（大于一半高度），优先判定行
-            let isAfter = false;
-
-            if (activeCenterY > overCenterY + overRect.height / 2) {
-              isAfter = true; // 明显在下一行
-            } else if (activeCenterY < overCenterY - overRect.height / 2) {
-              isAfter = false; // 明显在上一行
-            } else {
-              // 同行（或重叠），比较 X 轴
-              if (activeCenterX > overCenterX) {
-                isAfter = true;
-              }
-            }
-
-            const modifier = isAfter ? 1 : 0;
-            insertIndex = idx + modifier;
+            const isAfter = activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2 ||
+              (Math.abs(activeRect.top - overRect.top) < 10 && activeRect.left > overRect.left);
+            insertIndex = idx + (isAfter ? 1 : 0);
           } else {
-            // Fallback
             insertIndex = idx;
           }
         }
       }
 
-      target.sites.splice(insertIndex, 0, movedSite);
+      newTargetSites.splice(insertIndex, 0, siteToInsert);
+      newGroups[targetIndex] = { ...target, sites: newTargetSites } as any;
+
       return newGroups;
     });
   };
@@ -945,11 +939,52 @@ function App() {
     // 处理分组排序
     if (!activeId.startsWith('site-') && !overId.startsWith('site-')) {
       if (activeId !== overId) {
-        const oldIndex = groups.findIndex((group) => group.id.toString() === activeId);
-        const newIndex = groups.findIndex((group) => group.id.toString() === overId);
+        const oldIndex = groups.findIndex((group) => `group-${group.id}` === activeId);
+        const newIndex = groups.findIndex((group) => `group-${group.id}` === overId);
 
         if (oldIndex !== -1 && newIndex !== -1) {
-          setGroups(arrayMove(groups, oldIndex, newIndex));
+          const newGroups = arrayMove(groups, oldIndex, newIndex);
+          setGroups(newGroups);
+
+          // 自动保存分组顺序
+          const groupOrders = newGroups.map((group, index) => ({
+            id: group.id as number,
+            order_num: index,
+          }));
+          api.updateGroupOrder(groupOrders).catch(err => {
+            console.error('自动保存分组排序失败:', err);
+            handleError('自动保存分组排序失败: ' + err.message);
+          });
+        }
+      }
+    }
+    // 处理站点排序 (同组内)
+    else if (activeId.startsWith('site-') && overId.startsWith('site-')) {
+      // 只有在 SiteSort 模式且在当前编辑组内才处理
+      if (sortMode === SortMode.SiteSort && currentSortingGroupId) {
+        const activeSiteId = parseInt(activeId.replace('site-', ''));
+        const overSiteId = parseInt(overId.replace('site-', ''));
+
+        const currentGroupId = currentSortingGroupId;
+        const groupIndex = groups.findIndex(g => g.id === currentGroupId);
+        if (groupIndex !== -1) {
+          const targetGroup = groups[groupIndex];
+          if (targetGroup) {
+            const oldIndex = targetGroup.sites.findIndex(s => s.id === activeSiteId);
+            const newIndex = targetGroup.sites.findIndex(s => s.id === overSiteId);
+
+            if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+              const newSites = arrayMove(targetGroup.sites, oldIndex, newIndex);
+              const newGroups = [...groups];
+              newGroups[groupIndex] = { ...targetGroup, sites: newSites } as any;
+              setGroups(newGroups);
+
+              // 自动保存站点顺序
+              handleSaveSiteOrder(currentGroupId!, newSites).catch(err => {
+                console.error('自动保存站点排序失败:', err);
+              });
+            }
+          }
         }
       }
     }
@@ -1317,6 +1352,29 @@ function App() {
     }
   };
 
+  // 批量删除站点
+  const handleBatchDeleteSites = async (siteIds: number[]) => {
+    if (siteIds.length === 0) return;
+
+    try {
+      const success = await api.deleteSites(siteIds);
+      if (success) {
+        // 乐观更新 UI：从当前分组状态中移除被删除的站点
+        setGroups(prev => prev.map(group => ({
+          ...group,
+          sites: group.sites.filter(site => !siteIds.includes(site.id as number))
+        })));
+
+        handleSuccess(`成功删除 ${siteIds.length} 个书签`);
+      } else {
+        handleError('批量删除书签失败');
+      }
+    } catch (error) {
+      console.error('批量删除书签出错:', error);
+      handleError('批量删除书签出错: ' + (error as Error).message);
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -1451,21 +1509,7 @@ function App() {
             >
               {sortMode !== SortMode.None ? (
                 <>
-                  {sortMode === SortMode.GroupSort && (
-                    <Button
-                      variant='contained'
-                      color='primary'
-                      startIcon={<SaveIcon />}
-                      onClick={handleSaveGroupOrder}
-                      size='small'
-                      sx={{
-                        minWidth: 'auto',
-                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      }}
-                    >
-                      保存分组顺序
-                    </Button>
-                  )}
+
                   {sortMode === SortMode.CrossGroupDrag && (
                     <Typography
                       variant='body2'
@@ -1495,22 +1539,8 @@ function App() {
                     // 访客模式：隐藏登录按钮 (通过 URL ?login=1 进入)
                     null
                   ) : (
-                    // 编辑模式：显示管理按钮
-                    <>
-                      <Button
-                        variant='contained'
-                        color='primary'
-                        startIcon={<AddIcon />}
-                        onClick={handleOpenAddGroup}
-                        size='small'
-                        sx={{
-                          minWidth: 'auto',
-                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                        }}
-                      >
-                        新增分组
-                      </Button>
-                    </>
+                    // 编辑模式：隐藏管理按钮 (已移至头像菜单)
+                    null
                   )}
                 </>
               )}
@@ -1525,6 +1555,7 @@ function App() {
                   onOpenConfig={handleOpenConfig}
                   onExportData={handleExportData}
                   onOpenImport={handleOpenImport}
+                  onOpenAddGroup={handleOpenAddGroup}
                   api={api}
                 />
               )}
@@ -1639,13 +1670,12 @@ function App() {
                               viewMode={viewMode}
                               onUpdate={handleSiteUpdate}
                               onDelete={handleSiteDelete}
-                              onSaveSiteOrder={handleSaveSiteOrder}
                               onStartSiteSort={startSiteSort}
                               onAddSite={handleOpenAddSite}
                               onUpdateGroup={handleGroupUpdate}
                               onDeleteGroup={handleGroupDelete}
+                              onBatchDelete={handleBatchDeleteSites}
                               configs={configs}
-                              onSiteDragOver={handleSiteDragOver}
                               draggedSiteId={draggedSiteId}
                             />
                           ))}

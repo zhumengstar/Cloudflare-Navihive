@@ -118,6 +118,7 @@ export interface LoginResponse {
 export interface RegisterRequest {
   username: string;
   password: string;
+  email: string;
 }
 
 export interface RegisterResponse {
@@ -187,7 +188,12 @@ export class NavigationAPI {
 
     // 创建 users 表（即使已初始化也尝试创建，以支持旧版本升级）
     try {
-      await this.db.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT DEFAULT \'user\', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);');
+      await this.db.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, email TEXT, role TEXT DEFAULT \'user\', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);');
+    } catch { }
+
+    // 迁移：为 users 表添加 email 字段
+    try {
+      await this.db.exec('ALTER TABLE users ADD COLUMN email TEXT;');
     } catch { }
 
     // 迁移环境变量中的管理员到 users 表
@@ -339,6 +345,36 @@ export class NavigationAPI {
     return { success: false, message: '用户名或密码错误' };
   }
 
+  // 获取用户信息
+  async getUserProfile(userId: number): Promise<{ id: number; username: string; email: string | null; role: string }> {
+    const user = await this.db
+      .prepare('SELECT id, username, email, role FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ id: number; username: string; email: string | null; role: string }>();
+
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    return user;
+  }
+
+  // 更新用户信息
+  async updateUserProfile(userId: number, data: { email?: string }): Promise<{ success: boolean; message?: string }> {
+    try {
+      if (data.email) {
+        await this.db
+          .prepare('UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .bind(data.email, userId)
+          .run();
+      }
+      return { success: true, message: '用户信息更新成功' };
+    } catch (error) {
+      console.error('更新用户信息失败:', error);
+      return { success: false, message: '更新用户信息失败' };
+    }
+  }
+
   // 注册新用户
   async register(request: RegisterRequest): Promise<RegisterResponse> {
     try {
@@ -357,8 +393,8 @@ export class NavigationAPI {
 
       // 插入新用户
       await this.db
-        .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
-        .bind(request.username, passwordHash, 'user')
+        .prepare('INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)')
+        .bind(request.username, passwordHash, request.email, 'user')
         .run();
 
       return { success: true, message: '注册成功' };
@@ -1023,6 +1059,62 @@ export class NavigationAPI {
       )
       .then(() => true)
       .catch(() => false);
+  }
+
+  async deleteSites(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+
+    // 使用 batch 执行多个单独的更新或者使用 IN 子句
+    // 考虑到 D1 的 prepare 限制，对于批量操作，使用 batch 的 prepare 列表通常更稳健
+    return await this.db
+      .batch(
+        ids.map((id) =>
+          this.db
+            .prepare('UPDATE sites SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .bind(id)
+        )
+      )
+      .then(() => true)
+      .catch((err) => {
+        console.error('批量删除站点失败:', err);
+        return false;
+      });
+  }
+
+  async restoreSites(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+
+    return await this.db
+      .batch(
+        ids.map((id) =>
+          this.db
+            .prepare('UPDATE sites SET is_deleted = 0, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .bind(id)
+        )
+      )
+      .then(() => true)
+      .catch((err) => {
+        console.error('批量恢复站点失败:', err);
+        return false;
+      });
+  }
+
+  async deleteSitesPermanently(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+
+    return await this.db
+      .batch(
+        ids.map((id) =>
+          this.db
+            .prepare('DELETE FROM sites WHERE id = ?')
+            .bind(id)
+        )
+      )
+      .then(() => true)
+      .catch((err) => {
+        console.error('批量永久删除站点失败:', err);
+        return false;
+      });
   }
 
   // 导出所有数据

@@ -15,6 +15,7 @@ import {
   Box,
   Fade,
   Tooltip,
+  Checkbox,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -27,6 +28,9 @@ interface SiteCardProps {
   viewMode?: 'readonly' | 'edit'; // 访问模式
   index?: number;
   iconApi?: string; // 添加iconApi属性
+  isBatchMode?: boolean; // 新增：是否处于批量模式
+  isSelected?: boolean; // 新增：是否被选中
+  onToggleSelection?: (id: number) => void; // 新增：切换选中回调
 }
 
 // 使用memo包装组件以减少不必要的重渲染
@@ -38,6 +42,9 @@ const SiteCard = memo(function SiteCard({
   viewMode = 'edit', // 默认为编辑模式
   index = 0,
   iconApi, // 添加iconApi参数
+  isBatchMode = false,
+  isSelected = false,
+  onToggleSelection,
 }: SiteCardProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [iconError, setIconError] = useState(!site.icon);
@@ -46,11 +53,11 @@ const SiteCard = memo(function SiteCard({
   // 使用dnd-kit的useSortable hook
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `site-${site.id || index}`,
-    disabled: !isEditMode,
+    disabled: !isEditMode || isBatchMode, // 批量模式下禁用拖拽
   });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
     zIndex: isDragging ? 9999 : 'auto',
     opacity: isDragging ? 0 : 1, // 拖动时隐藏原位置
@@ -74,6 +81,10 @@ const SiteCard = memo(function SiteCard({
 
   // 处理卡片点击
   const handleCardClick = () => {
+    if (isBatchMode && site.id && onToggleSelection) {
+      onToggleSelection(site.id);
+      return;
+    }
     if (!isEditMode && site.url) {
       window.open(site.url, '_blank');
     }
@@ -250,6 +261,36 @@ const SiteCard = memo(function SiteCard({
                   '&:last-child': { pb: { xs: 1.5, sm: 2 } },
                 }}
               >
+                {/* 批量操作复选框 */}
+                {isBatchMode && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 4,
+                      left: 4,
+                      zIndex: 3, // 确保在最上层
+                    }}
+                  >
+                    <Checkbox
+                      checked={isSelected}
+                      size="small"
+                      color="primary"
+                      onChange={() => onToggleSelection?.(site.id as number)}
+                      onClick={(e) => e.stopPropagation()} // 阻止冒泡到 CardActionArea
+                      sx={{
+                        p: 0.5,
+                        '&.Mui-checked': {
+                          color: 'primary.main',
+                        },
+                        backgroundColor: (theme) =>
+                          theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.8)',
+                        borderRadius: '4px',
+                        boxShadow: 1,
+                      }}
+                    />
+                  </Box>
+                )}
+
                 {/* 图标和名称 */}
                 <Box display='flex' alignItems='center' mb={1}>
                   {!iconError && site.icon ? (

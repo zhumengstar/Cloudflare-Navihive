@@ -48,13 +48,13 @@ export class NavigationClient {
   }
 
   // 注册API
-  async register(username: string, password: string): Promise<RegisterResponse> {
+  async register(username: string, password: string, email: string): Promise<RegisterResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, email }),
       });
 
       const data: RegisterResponse = await response.json();
@@ -183,6 +183,19 @@ export class NavigationClient {
     }
   }
 
+  // 获取用户信息
+  async getUserProfile(): Promise<{ username: string; email: string; role: string }> {
+    return this.request('user/profile');
+  }
+
+  // 更新用户信息
+  async updateUserProfile(data: { email?: string }): Promise<{ success: boolean; message?: string }> {
+    return this.request('user/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   // 分组相关API
   async getGroups(): Promise<Group[]> {
     return this.request('groups');
@@ -245,6 +258,33 @@ export class NavigationClient {
   async deleteSite(id: number): Promise<boolean> {
     const response = await this.request(`sites/${id}`, {
       method: 'DELETE',
+    });
+    return response.success;
+  }
+
+  async deleteSites(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+    const response = await this.request('sites/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+    return response.success;
+  }
+
+  async restoreSites(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+    const response = await this.request('sites/batch-restore', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+    return response.success;
+  }
+
+  async deleteSitesPermanently(ids: number[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+    const response = await this.request('sites/batch-delete-permanent', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
     });
     return response.success;
   }

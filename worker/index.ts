@@ -585,6 +585,14 @@ export default {
                     );
                 }
 
+                // 获取当前用户信息
+                if (path === "user/profile" && method === "GET") {
+                    // 在此处，我们需要确保请求已经通过了验证
+                    // 但是因为这个 if 块在验证中间件之前，我们需要特殊处理
+                    // 或者移动到验证中间件之后。
+                    // 鉴于目前逻辑，我将其移动到验证中间件之后更好的位置。
+                }
+
                 // 初始化数据库接口 - 不需要验证
                 if (path === "init" && method === "GET") {
                     const initResult = await api.initDB();
@@ -685,6 +693,48 @@ export default {
                 }
 
                 // 路由匹配
+                // GET /api/user/profile 获取当前用户信息
+                if (path === "user/profile" && method === "GET") {
+                    if (!isAuthenticated || !currentUserId) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+                    try {
+                        const profile = await api.getUserProfile(currentUserId);
+                        return createJsonResponse(profile, request);
+                    } catch (error) {
+                        return createJsonResponse(
+                            { success: false, message: "获取用户信息失败" },
+                            request,
+                            { status: 500 }
+                        );
+                    }
+                } else if (path === "user/profile" && method === "PUT") {
+                    if (!isAuthenticated || !currentUserId) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+                    try {
+                        const data = (await validateRequestBody(request)) as { email?: string };
+                        if (data.email) {
+                            // 验证邮箱格式
+                            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+                                return createJsonResponse(
+                                    { success: false, message: "邮箱格式不符合规范" },
+                                    request,
+                                    { status: 400 }
+                                );
+                            }
+                        }
+                        const result = await api.updateUserProfile(currentUserId, data);
+                        return createJsonResponse(result, request);
+                    } catch (error) {
+                        return createJsonResponse(
+                            { success: false, message: "更新用户信息失败" },
+                            request,
+                            { status: 500 }
+                        );
+                    }
+                }
+
                 // GET /api/groups-with-sites 获取所有分组及其站点 (优化 N+1 查询)
                 if (path === "groups-with-sites" && method === "GET") {
                     // 如果已登录，获取该用户的分组；否则获取所有（后续过滤）
@@ -998,6 +1048,30 @@ export default {
                     }
 
                     const result = await api.deleteSite(id);
+                    return createJsonResponse({ success: result }, request);
+                }
+                else if (path === "sites/batch-delete" && method === "POST") {
+                    const data = (await validateRequestBody(request)) as { ids: number[] };
+                    if (!data.ids || !Array.isArray(data.ids)) {
+                        return createJsonResponse({ success: false, message: "无效的 ID 列表" }, request, { status: 400 });
+                    }
+                    const result = await api.deleteSites(data.ids);
+                    return createJsonResponse({ success: result }, request);
+                }
+                else if (path === "sites/batch-restore" && method === "POST") {
+                    const data = (await validateRequestBody(request)) as { ids: number[] };
+                    if (!data.ids || !Array.isArray(data.ids)) {
+                        return createJsonResponse({ success: false, message: "无效的 ID 列表" }, request, { status: 400 });
+                    }
+                    const result = await api.restoreSites(data.ids);
+                    return createJsonResponse({ success: result }, request);
+                }
+                else if (path === "sites/batch-delete-permanent" && method === "POST") {
+                    const data = (await validateRequestBody(request)) as { ids: number[] };
+                    if (!data.ids || !Array.isArray(data.ids)) {
+                        return createJsonResponse({ success: false, message: "无效的 ID 列表" }, request, { status: 400 });
+                    }
+                    const result = await api.deleteSitesPermanently(data.ids);
                     return createJsonResponse({ success: result }, request);
                 }
                 // 批量更新排序
@@ -1337,6 +1411,7 @@ function validateLogin(data: LoginInput): { valid: boolean; errors?: string[] } 
 interface RegisterInput {
     username?: string;
     password?: string;
+    email?: string;
 }
 
 function validateRegister(data: RegisterInput): { valid: boolean; errors?: string[] } {
@@ -1354,6 +1429,12 @@ function validateRegister(data: RegisterInput): { valid: boolean; errors?: strin
         errors.push("密码不能为空且必须是字符串");
     } else if (data.password.length < 6 || data.password.length > 64) {
         errors.push("密码长度必须在6-64个字符之间");
+    }
+
+    if (!data.email || typeof data.email !== "string") {
+        errors.push("邮箱不能为空且必须是字符串");
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        errors.push("邮箱格式不符合规范");
     }
 
     return { valid: errors.length === 0, errors };
