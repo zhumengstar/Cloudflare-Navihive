@@ -412,7 +412,7 @@ export default function SiteSettingsModal({
                     上次点击时间
                   </Typography>
                   <Typography variant='body2' fontWeight='medium'>
-                    {new Date(site.last_clicked_at).toLocaleString()}
+                    {new Date(site.last_clicked_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                   </Typography>
                 </Box>
               )}
