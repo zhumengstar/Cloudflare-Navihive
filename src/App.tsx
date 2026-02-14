@@ -10,6 +10,7 @@ import LoginForm from './components/LoginForm';
 import VisitorHome from './components/VisitorHome';
 import UserAvatar from './components/UserAvatar';
 import SearchBox from './components/SearchBox';
+import AIChatPanel from './components/AIChatPanel';
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
 import { SearchResultItem } from './utils/search';
 import './App.css';
@@ -1561,6 +1562,26 @@ function App() {
                   onLogout={handleLogout}
                 />
               )}
+              {/* GitHub 图标 */}
+              <IconButton
+                component='a'
+                href='https://github.com/zqq-nuli/Navihive'
+                target='_blank'
+                rel='noopener noreferrer'
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '50%',
+                  bgcolor: 'background.paper',
+                  boxShadow: 1,
+                  color: 'text.primary',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
+                }}
+              >
+                <GitHubIcon />
+              </IconButton>
             </Stack>
           </Box>
 
@@ -2221,40 +2242,7 @@ function App() {
             </DialogActions>
           </Dialog>
 
-          {/* GitHub角标 - 在移动端调整位置 */}
-          <Box
-            sx={{
-              position: 'fixed',
-              bottom: { xs: 8, sm: 16 },
-              right: { xs: 8, sm: 16 },
-              zIndex: 10,
-            }}
-          >
-            <Paper
-              component='a'
-              href='https://github.com/zqq-nuli/Navihive'
-              target='_blank'
-              rel='noopener noreferrer'
-              elevation={2}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                p: 1.5,
-                borderRadius: 10,
-                bgcolor: 'background.paper',
-                color: 'text.secondary',
-                transition: 'all 0.3s ease-in-out',
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                  color: 'text.primary',
-                  boxShadow: 4,
-                },
-                textDecoration: 'none',
-              }}
-            >
-              <GitHubIcon fontSize="large" />
-            </Paper>
-          </Box>
+
         </Container>
         <ScrollTop>
           <Fab size="large" aria-label="scroll back to top" color="primary">
@@ -2262,6 +2250,8 @@ function App() {
           </Fab>
         </ScrollTop>
       </Box>
+      {/* AI 智能问答悬浮窗 */}
+      {isAuthenticated && <AIChatPanel api={api} />}
     </ThemeProvider>
   );
 }

@@ -527,4 +527,27 @@ export class MockNavigationClient {
       };
     }
   }
+
+  // AI 智能问答（模拟）
+  async chat(
+    message: string,
+    _history: { role: string; content: string }[] = []
+  ): Promise<{ success: boolean; reply?: string; message?: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // 简单的模拟回复
+    const lowerMessage = message.toLowerCase();
+    let reply = '';
+
+    if (lowerMessage.includes('书签') || lowerMessage.includes('网站') || lowerMessage.includes('推荐')) {
+      const siteNames = mockSites.slice(0, 5).map(s => s.name).join('、');
+      reply = `根据你的书签库，我找到了这些相关网站：${siteNames}。你想了解哪个网站的详细信息？`;
+    } else if (lowerMessage.includes('你好') || lowerMessage.includes('hi') || lowerMessage.includes('hello')) {
+      reply = '你好！我是 NaviHive 智能助手 🤖 我可以帮你搜索书签、推荐网站，或者回答其他问题。有什么可以帮你的？';
+    } else {
+      reply = `这是一个模拟回复（开发模式）。你说的是："${message}"。在生产环境中，这里会调用 Cloudflare Workers AI 来生成真实的回答。`;
+    }
+
+    return { success: true, reply };
+  }
 }

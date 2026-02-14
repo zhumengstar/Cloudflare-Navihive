@@ -150,7 +150,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
                 aria-controls={menuOpen ? 'user-menu' : undefined}
                 aria-haspopup='true'
                 aria-expanded={menuOpen ? 'true' : undefined}
-                sx={{ ml: 0.5 }}
+                sx={{ p: 0 }}
             >
                 <Avatar
                     sx={{

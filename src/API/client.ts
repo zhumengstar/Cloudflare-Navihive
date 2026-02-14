@@ -308,4 +308,23 @@ export class NavigationClient {
     });
     return response;
   }
+
+  // AI 智能问答
+  async chat(
+    message: string,
+    history: { role: string; content: string }[] = []
+  ): Promise<{ success: boolean; reply?: string; message?: string }> {
+    try {
+      return await this.request('chat', {
+        method: 'POST',
+        body: JSON.stringify({ message, history }),
+      });
+    } catch (error) {
+      console.error('AI 问答失败:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'AI 服务暂不可用',
+      };
+    }
+  }
 }

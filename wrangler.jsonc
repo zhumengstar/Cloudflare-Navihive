@@ -16,6 +16,10 @@
     "observability": {
         "enabled": true
     },
+    // Workers AI 绑定
+    "ai": {
+        "binding": "AI"
+    },
     // D1数据库绑定
     "d1_databases": [
         {

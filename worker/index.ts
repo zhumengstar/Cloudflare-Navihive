@@ -1106,6 +1106,85 @@ export default {
                     return createJsonResponse(result, request);
                 }
 
+                // AI 智能问答路由
+                else if (path === "chat" && method === "POST") {
+                    const body = (await validateRequestBody(request)) as {
+                        message: string;
+                        history?: { role: string; content: string }[];
+                    };
+
+                    if (!body.message || typeof body.message !== 'string') {
+                        return createJsonResponse(
+                            { success: false, message: '消息内容不能为空' },
+                            request,
+                            { status: 400 }
+                        );
+                    }
+
+                    // 查询用户书签数据作为上下文
+                    let bookmarkContext = '';
+                    try {
+                        const groups = await env.DB.prepare(
+                            'SELECT id, name FROM groups ORDER BY order_num'
+                        ).all();
+                        const sites = await env.DB.prepare(
+                            'SELECT name, url, description, group_id FROM sites ORDER BY order_num'
+                        ).all();
+
+                        if (groups.results && sites.results) {
+                            const groupMap = new Map<number, string>();
+                            for (const g of groups.results as { id: number; name: string }[]) {
+                                groupMap.set(g.id, g.name);
+                            }
+                            const lines: string[] = [];
+                            for (const s of sites.results as { name: string; url: string; description: string; group_id: number }[]) {
+                                const gName = groupMap.get(s.group_id) || '未分组';
+                                lines.push(`[${gName}] ${s.name}: ${s.url}${s.description ? ' - ' + s.description : ''}`);
+                            }
+                            bookmarkContext = lines.join('\n');
+                        }
+                    } catch (e) {
+                        console.error('查询书签上下文失败:', e);
+                    }
+
+                    const systemPrompt = `你是 NaviHive 智能导航助手。你可以帮助用户搜索和推荐书签，也可以回答一般性问题。
+请用简洁友好的中文回复。
+
+${bookmarkContext ? `以下是用户保存的书签数据：\n${bookmarkContext}\n\n当用户询问与书签相关的问题时，请参考以上数据进行回答。` : '用户暂无保存的书签数据。'}`;
+
+                    const messages = [
+                        { role: 'system' as const, content: systemPrompt },
+                        ...(body.history || []).slice(-10).map(m => ({
+                            role: m.role as 'user' | 'assistant',
+                            content: m.content,
+                        })),
+                        { role: 'user' as const, content: body.message },
+                    ];
+
+                    try {
+                        const aiResponse = await env.AI.run(
+                            '@cf/meta/llama-3.1-8b-instruct',
+                            { messages, stream: false }
+                        );
+
+                        const responseText = typeof aiResponse === 'string'
+                            ? aiResponse
+                            : (aiResponse as { response?: string }).response || JSON.stringify(aiResponse);
+
+                        return createJsonResponse(
+                            { success: true, reply: responseText },
+                            request
+                        );
+                    } catch (aiError) {
+                        console.error('AI 调用失败:', aiError);
+                        return createJsonResponse(
+                            { success: false, message: 'AI 服务暂不可用，请稍后重试' },
+                            request,
+                            { status: 503 }
+                        );
+                    }
+                }
+
                 // 默认返回404
                 return createResponse("API路径不存在", request, { status: 404 });
             } catch (error) {
@@ -1121,6 +1200,7 @@ export default {
 // 环境变量接口
 interface Env {
     DB: D1Database;
+    AI: Ai;
     AUTH_ENABLED?: string;
     AUTH_REQUIRED_FOR_READ?: string;
     AUTH_USERNAME?: string;
