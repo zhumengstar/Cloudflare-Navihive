@@ -55,6 +55,8 @@ export interface Site {
   is_public?: number; // 0 = 私密（仅管理员可见），1 = 公开（访客可见）
   created_at?: string;
   updated_at?: string;
+  is_deleted?: number;
+  deleted_at?: string;
 }
 
 // 分组及其站点 (用于优化 N+1 查询)
@@ -631,11 +633,11 @@ export class NavigationAPI {
   // 网站相关 API
   async getSites(groupId?: number): Promise<Site[]> {
     let query =
-      'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites';
+      'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites WHERE (is_deleted = 0 OR is_deleted IS NULL)';
     const params: (string | number)[] = [];
 
     if (groupId !== undefined) {
-      query += ' WHERE group_id = ?';
+      query += ' AND group_id = ?';
       params.push(groupId);
     }
 
@@ -674,7 +676,7 @@ export class NavigationAPI {
         s.created_at as site_created_at,
         s.updated_at as site_updated_at
       FROM groups g
-      LEFT JOIN sites s ON g.id = s.group_id
+      LEFT JOIN sites s ON g.id = s.group_id AND (s.is_deleted = 0 OR s.is_deleted IS NULL)
     `;
 
     const params: any[] = [];
@@ -902,6 +904,45 @@ export class NavigationAPI {
   async deleteSite(id: number): Promise<boolean> {
     const result = await this.db.prepare('DELETE FROM sites WHERE id = ?').bind(id).run();
     return result.success;
+  }
+
+  // Soft delete site
+  async softDeleteSite(id: number): Promise<boolean> {
+    const result = await this.db
+      .prepare('UPDATE sites SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(id)
+      .run();
+    return result.success;
+  }
+
+  // Restore site
+  async restoreSite(id: number): Promise<boolean> {
+    const result = await this.db
+      .prepare('UPDATE sites SET is_deleted = 0, deleted_at = NULL WHERE id = ?')
+      .bind(id)
+      .run();
+    return result.success;
+  }
+
+  // Get trash sites
+  async getTrashSites(userId?: number): Promise<Site[]> {
+    let query = `
+      SELECT s.id, s.group_id, s.name, s.url, s.icon, s.description, s.notes, s.order_num, s.created_at, s.updated_at, s.deleted_at 
+      FROM sites s
+      JOIN groups g ON s.group_id = g.id
+      WHERE s.is_deleted = 1
+    `;
+    const params: any[] = [];
+
+    if (userId !== undefined) {
+      query += ' AND g.user_id = ?';
+      params.push(userId);
+    }
+
+    query += ' ORDER BY s.deleted_at DESC';
+
+    const result = await this.db.prepare(query).bind(...params).all<Site>();
+    return result.results || [];
   }
 
   // 配置相关API

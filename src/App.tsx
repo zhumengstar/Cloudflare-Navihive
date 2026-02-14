@@ -1559,6 +1559,7 @@ function App() {
                 <UserAvatar
                   username={username}
                   onLogout={handleLogout}
+                  onSiteRestored={fetchData}
                 />
               )}
               {/* GitHub 图标 */}
@@ -2250,7 +2251,7 @@ function App() {
         </ScrollTop>
       </Box>
       {/* AI 智能问答悬浮窗 */}
-      {isAuthenticated && <AIChatPanel api={api} />}
+      {isAuthenticated && <AIChatPanel api={api} username={username} />}
     </ThemeProvider>
   );
 }

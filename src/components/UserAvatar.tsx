@@ -26,17 +26,22 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import RecycleBin from './RecycleBin';
 
 interface UserAvatarProps {
     username: string;
     onLogout: () => void;
+    onLogout: () => void;
     onChangePassword?: (oldPassword: string, newPassword: string) => Promise<boolean>;
+    onSiteRestored?: () => void;
 }
 
-const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePassword }) => {
+const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePassword, onSiteRestored }) => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [infoOpen, setInfoOpen] = useState(false);
     const [changePwdOpen, setChangePwdOpen] = useState(false);
+    const [recycleBinOpen, setRecycleBinOpen] = useState(false);
     const [oldPassword, setOldPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -113,6 +118,21 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
             } finally {
                 setChangePwdLoading(false);
             }
+        }
+    };
+
+    const handleRecycleBinOpen = () => {
+        handleMenuClose();
+        setRecycleBinOpen(true);
+    };
+
+    const handleRecycleBinClose = () => {
+        setRecycleBinOpen(false);
+    };
+
+    const handleRestoreSite = () => {
+        if (onSiteRestored) {
+            onSiteRestored();
         }
     };
 
@@ -220,6 +240,12 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
                         <InfoOutlinedIcon fontSize='small' />
                     </ListItemIcon>
                     <ListItemText>账号信息</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={handleRecycleBinOpen}>
+                    <ListItemIcon>
+                        <DeleteSweepIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>书签回收站</ListItemText>
                 </MenuItem>
                 {onChangePassword && (
                     <MenuItem onClick={handleChangePwdOpen}>
@@ -361,6 +387,12 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <RecycleBin
+                open={recycleBinOpen}
+                onClose={handleRecycleBinClose}
+                onRestore={handleRestoreSite}
+            />
         </>
     );
 };

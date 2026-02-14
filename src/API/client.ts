@@ -249,6 +249,24 @@ export class NavigationClient {
     return response.success;
   }
 
+  async restoreSite(id: number): Promise<boolean> {
+    const response = await this.request(`sites/${id}/restore`, {
+      method: 'POST',
+    });
+    return response.success;
+  }
+
+  async getTrashSites(): Promise<Site[]> {
+    return this.request('sites/trash');
+  }
+
+  async deleteSitePermanently(id: number): Promise<boolean> {
+    const response = await this.request(`sites/${id}/permanent`, {
+      method: 'DELETE',
+    });
+    return response.success;
+  }
+
   // 配置相关API
   async getConfigs(): Promise<Record<string, string>> {
     return this.request('configs');

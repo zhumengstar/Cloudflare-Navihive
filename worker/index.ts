@@ -849,7 +849,9 @@ export default {
                     }
 
                     if (conditions.length > 0) {
-                        query += ' WHERE ' + conditions.join(' AND ');
+                        query += ' WHERE ' + conditions.join(' AND ') + ' AND (s.is_deleted = 0 OR s.is_deleted IS NULL)';
+                    } else {
+                        query += ' WHERE (s.is_deleted = 0 OR s.is_deleted IS NULL)';
                     }
 
                     query += ' ORDER BY s.group_id ASC, s.order_num ASC';
@@ -945,6 +947,44 @@ export default {
                     return createJsonResponse(result, request);
                 } else if (path.startsWith("sites/") && method === "DELETE") {
                     const idStr = path.split("/")[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const id = parseInt(idStr);
+                    if (isNaN(id)) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+
+                    const result = await api.softDeleteSite(id);
+                    return createJsonResponse({ success: result }, request);
+                } else if (path === "sites/trash" && method === "GET") {
+                    const sites = await api.getTrashSites(currentUserId);
+                    return createJsonResponse(sites, request);
+                } else if (path.startsWith("sites/") && path.endsWith("/restore") && method === "POST") {
+                    // Extract ID from /sites/123/restore
+                    const parts = path.split("/");
+                    if (parts.length < 3) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const idStr = parts[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const id = parseInt(idStr);
+                    if (isNaN(id)) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+
+                    const result = await api.restoreSite(id);
+                    return createJsonResponse({ success: result }, request);
+
+                } else if (path.startsWith("sites/") && path.endsWith("/permanent") && method === "DELETE") {
+                    // Extract ID from /sites/123/permanent
+                    const parts = path.split("/");
+                    if (parts.length < 3) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const idStr = parts[1];
                     if (!idStr) {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
                     }

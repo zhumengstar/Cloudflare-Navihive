@@ -209,6 +209,9 @@ export class MockNavigationClient {
       );
     }
 
+    // Filter deleted sites
+    sites = sites.filter(s => !s.is_deleted);
+
     // 组合分组和站点
     return groups.map((group) => ({
       ...group,
@@ -278,6 +281,9 @@ export class MockNavigationClient {
       );
     }
 
+    // 过滤掉已删除的站点
+    sites = sites.filter(s => !s.is_deleted);
+
     // 按分组过滤
     if (groupId) {
       return sites.filter((site) => site.group_id === groupId);
@@ -323,7 +329,54 @@ export class MockNavigationClient {
     return updated || null;
   }
 
+  async softDeleteSite(id: number): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const index = mockSites.findIndex((s) => s.id === id);
+    if (index === -1) return false;
+
+    const existing = mockSites[index];
+    if (existing) {
+      mockSites[index] = {
+        ...existing,
+        is_deleted: 1,
+        deleted_at: new Date().toISOString()
+      };
+      saveSitesToStorage();
+    }
+    return true;
+  }
+
+  // 保持兼容性，deleteSite 指向 softDeleteSite
   async deleteSite(id: number): Promise<boolean> {
+    return this.softDeleteSite(id);
+  }
+
+  async restoreSite(id: number): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const index = mockSites.findIndex((s) => s.id === id);
+    if (index === -1) return false;
+
+    const existing = mockSites[index];
+    if (existing) {
+      mockSites[index] = {
+        ...existing,
+        is_deleted: 0,
+        deleted_at: undefined
+      };
+      saveSitesToStorage();
+    }
+    return true;
+  }
+
+  async getTrashSites(userId?: number): Promise<Site[]> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // 简单模拟，忽略 userId 过滤（假设都是当前用户的）
+    return mockSites.filter(s => s.is_deleted === 1).sort((a, b) => {
+      return new Date(b.deleted_at || 0).getTime() - new Date(a.deleted_at || 0).getTime();
+    });
+  }
+
+  async deleteSitePermanently(id: number): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const index = mockSites.findIndex((s) => s.id === id);
     if (index === -1) return false;
@@ -544,7 +597,7 @@ export class MockNavigationClient {
     let current = 0;
 
     return new Promise<void>((resolve) => {
-      onUpdate(''); // 初始化
+      // onUpdate(''); // 移除初始化调用，模拟真实网络延迟
       const interval = setInterval(() => {
         if (current >= reply.length) {
           clearInterval(interval);

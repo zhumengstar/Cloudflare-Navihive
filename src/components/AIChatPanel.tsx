@@ -13,12 +13,21 @@ import {
     CircularProgress,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
     SmartToy as SmartToyIcon,
     Close as CloseIcon,
     Send as SendIcon,
     Person as PersonIcon,
+    DeleteOutline as DeleteIcon,
 } from '@mui/icons-material';
+
+const DEFAULT_MESSAGES: ChatMessage[] = [
+    {
+        role: 'assistant',
+        content: '你好！我是 NaviHive 智能助手 🤖\n我可以帮你搜索书签、推荐网站，或回答其他问题。',
+    },
+];
 
 interface ChatMessage {
     role: 'user' | 'assistant';
@@ -28,21 +37,35 @@ interface ChatMessage {
 interface AIChatPanelProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
+    username: string;
 }
 
-const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
+const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
     const theme = useTheme();
     const [open, setOpen] = useState(false);
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        {
-            role: 'assistant',
-            content: '你好！我是 NaviHive 智能助手 🤖\n我可以帮你搜索书签、推荐网站，或回答其他问题。',
-        },
-    ]);
+
+    // Lazy initialization from localStorage
+    const [messages, setMessages] = useState<ChatMessage[]>(() => {
+        try {
+            const saved = localStorage.getItem(`chat_history_${username}`);
+            return saved ? JSON.parse(saved) : DEFAULT_MESSAGES;
+        } catch (e) {
+            console.error('Failed to load chat history:', e);
+            return DEFAULT_MESSAGES;
+        }
+    });
+
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Save to localStorage whenever messages change
+    useEffect(() => {
+        if (messages.length > 0) {
+            localStorage.setItem(`chat_history_${username}`, JSON.stringify(messages));
+        }
+    }, [messages, username]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,6 +80,11 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
             setTimeout(() => inputRef.current?.focus(), 300);
         }
     }, [open]);
+
+    const handleClearHistory = () => {
+        setMessages(DEFAULT_MESSAGES);
+        localStorage.removeItem(`chat_history_${username}`);
+    };
 
     const handleSend = async () => {
         const trimmed = input.trim();
@@ -73,12 +101,6 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                 content: m.content,
             }));
 
-            // 添加一个空的助理消息用于流显示
-            setMessages((prev) => [
-                ...prev,
-                { role: 'assistant', content: '' },
-            ]);
-
             let fullReply = '';
 
             if (api.chatStream) {
@@ -87,38 +109,43 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                     setMessages((prev) => {
                         const newMessages = [...prev];
                         const lastMsg = newMessages[newMessages.length - 1];
+
+                        // Check if we already have an assistant placeholder
                         if (lastMsg && lastMsg.role === 'assistant') {
                             lastMsg.content = fullReply;
+                            return newMessages;
+                        } else {
+                            // First chunk: add the assistant message
+                            return [...prev, { role: 'assistant', content: fullReply }];
                         }
-                        return newMessages;
                     });
                 });
             } else {
                 // 降级兼容
                 const result = await api.chat(trimmed, history);
                 if (result.success && result.reply) {
-                    setMessages((prev) => {
-                        const newMessages = [...prev];
-                        const lastMsg = newMessages[newMessages.length - 1];
-                        if (lastMsg) lastMsg.content = result.reply!;
-                        return newMessages;
-                    });
+                    setMessages((prev) => [
+                        ...prev,
+                        { role: 'assistant', content: result.reply! },
+                    ]);
                 } else {
-                    setMessages((prev) => {
-                        const newMessages = [...prev];
-                        const lastMsg = newMessages[newMessages.length - 1];
-                        if (lastMsg) lastMsg.content = result.message || '抱歉，我暂时无法回答。';
-                        return newMessages;
-                    });
+                    setMessages((prev) => [
+                        ...prev,
+                        {
+                            role: 'assistant',
+                            content: result.message || '抱歉，我暂时无法回答。',
+                        },
+                    ]);
                 }
             }
         } catch {
-            setMessages((prev) => {
-                const newMessages = [...prev];
-                const lastMsg = newMessages[newMessages.length - 1];
-                if (lastMsg) lastMsg.content = '网络错误，请检查连接后重试。';
-                return newMessages;
-            });
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: '网络错误，请检查连接后重试。',
+                },
+            ]);
         } finally {
             setLoading(false);
         }
@@ -197,13 +224,23 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                                 智能助手
                             </Typography>
                         </Box>
-                        <IconButton
-                            size="small"
-                            onClick={() => setOpen(false)}
-                            sx={{ color: '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' } }}
-                        >
-                            <CloseIcon fontSize="small" />
-                        </IconButton>
+                        <Box>
+                            <IconButton
+                                size="small"
+                                onClick={handleClearHistory}
+                                title="清空记录"
+                                sx={{ color: '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' }, mr: 0.5 }}
+                            >
+                                <DeleteIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                                size="small"
+                                onClick={() => setOpen(false)}
+                                sx={{ color: '#fff', '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' } }}
+                            >
+                                <CloseIcon fontSize="small" />
+                            </IconButton>
+                        </Box>
                     </Box>
 
                     {/* 消息列表 */}
@@ -288,6 +325,13 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                                                 fontFamily: 'monospace',
                                                 fontSize: '0.8em',
                                             },
+                                            '& strong': {
+                                                fontWeight: 700,
+                                                color: isDark ? '#fff' : '#000',
+                                            },
+                                            '& em': {
+                                                fontStyle: 'italic',
+                                            },
                                             '& pre': {
                                                 bgcolor: isDark ? 'rgba(0,0,0,0.3)' : '#f5f5f5',
                                                 p: 1.5,
@@ -306,14 +350,29 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                                                     : theme.palette.primary.main,
                                                 textDecoration: 'underline',
                                             },
+                                            '& table': {
+                                                borderCollapse: 'collapse',
+                                                width: '100%',
+                                                my: 1,
+                                            },
+                                            '& th, & td': {
+                                                border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'}`,
+                                                px: 1,
+                                                py: 0.5,
+                                                fontSize: '0.85rem',
+                                            },
+                                            '& th': {
+                                                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                                fontWeight: 600,
+                                            },
                                         }}
                                     >
-                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                                     </Box>
                                 </Box>
                             </Box>
                         ))}
-                        {loading && (
+                        {loading && messages[messages.length - 1]?.role !== 'assistant' && (
                             <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                                 <Avatar
                                     sx={{
