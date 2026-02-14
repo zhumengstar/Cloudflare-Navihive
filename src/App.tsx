@@ -180,7 +180,7 @@ function App() {
 
   // 新增认证状态
   const [isAuthChecking, setIsAuthChecking] = useState(true);
-  const [isAuthRequired, setIsAuthRequired] = useState(false);
+  const [_isAuthRequired, setIsAuthRequired] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -794,7 +794,6 @@ function App() {
       }
 
       target.sites.splice(insertIndex, 0, movedSite);
-
       return newGroups;
     });
   };
@@ -1625,7 +1624,7 @@ function App() {
                       sensors={sensors}
                       collisionDetection={closestCenter}
                       onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
+                      onDragEnd={sortMode === SortMode.CrossGroupDrag ? handleCrossGroupDragEnd : handleDragEnd}
                       onDragOver={handleSiteDragOver}
                     >
                       {sortMode === SortMode.GroupSort ? (

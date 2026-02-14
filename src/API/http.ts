@@ -240,7 +240,7 @@ export class NavigationAPI {
         console.log('Initializing default data...');
 
         // 1. 插入默认分组 (User ID 1 = Admin)
-        const groupRes = await this.db.prepare(
+        await this.db.prepare(
           `INSERT INTO groups (name, order_num, is_public, user_id) VALUES 
            ('常用工具', 1, 1, 1),
            ('开发社区', 2, 1, 1)

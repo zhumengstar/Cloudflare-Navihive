@@ -13,6 +13,7 @@ import {
  * 注意: 这是基于单个 Worker 实例的内存限制
  * 生产环境建议使用 Cloudflare KV 实现跨实例的速率限制
  */
+/*
 class SimpleRateLimiter {
     private requests: Map<string, { count: number; resetTime: number }> = new Map();
     private readonly maxRequests: number;
@@ -23,11 +24,6 @@ class SimpleRateLimiter {
         this.windowMs = windowMinutes * 60 * 1000;
     }
 
-    /**
-     * 检查是否超过速率限制
-     * @param identifier 唯一标识符 (如 IP 地址)
-     * @returns 如果允许请求返回 true,否则返回 false
-     */
     check(identifier: string): boolean {
         const now = Date.now();
         const record = this.requests.get(identifier);
@@ -54,9 +50,6 @@ class SimpleRateLimiter {
         return true;
     }
 
-    /**
-     * 获取剩余请求次数
-     */
     getRemaining(identifier: string): number {
         const record = this.requests.get(identifier);
         if (!record || Date.now() > record.resetTime) {
@@ -65,9 +58,6 @@ class SimpleRateLimiter {
         return Math.max(0, this.maxRequests - record.count);
     }
 
-    /**
-     * 定期清理过期记录 (避免内存泄漏)
-     */
     cleanup(): void {
         const now = Date.now();
         for (const [key, record] of this.requests.entries()) {
@@ -77,9 +67,10 @@ class SimpleRateLimiter {
         }
     }
 }
+*/
 
 // 创建登录端点速率限制器: 5次尝试/15分钟
-const loginRateLimiter = new SimpleRateLimiter(5, 15);
+// const loginRateLimiter = new SimpleRateLimiter(5, 15);
 
 
 /**
@@ -365,30 +356,14 @@ export default {
                 // 登录路由 - 不需要验证
                 if (path === "login" && method === "POST") {
                     try {
+                        /*
                         // 速率限制检查
                         const clientIP = request.headers.get('CF-Connecting-IP') ||
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
-                        /*
                         if (!loginRateLimiter.check(clientIP)) {
-                            const remaining = loginRateLimiter.getRemaining(clientIP);
-                            log({
-                                level: 'warn',
-                                message: '登录速率限制触发',
-                                path: '/api/login',
-                                method: 'POST',
-                                details: { clientIP, remaining }
-                            });
-
-                            return createJsonResponse(
-                                {
-                                    success: false,
-                                    message: '登录尝试次数过多，请稍后再试 (15分钟内最多5次)',
-                                },
-                                request,
-                                { status: 429 } // 429 Too Many Requests
-                            );
+                            // ...
                         }
                         */
 
@@ -467,12 +442,12 @@ export default {
                 // 注册路由 - 不需要验证，开放注册
                 if (path === "register" && method === "POST") {
                     try {
+                        /*
                         // 速率限制检查
                         const clientIP = request.headers.get('CF-Connecting-IP') ||
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
-                        /*
                         if (!loginRateLimiter.check(clientIP)) {
                             return createJsonResponse(
                                 {
@@ -519,11 +494,12 @@ export default {
                 if (path === "reset-password" && method === "POST") {
                     try {
                         // 速率限制检查
+                        /*
+                        // 速率限制检查
                         const clientIP = request.headers.get('CF-Connecting-IP') ||
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
-                        /*
                         if (!loginRateLimiter.check(clientIP)) {
                             return createJsonResponse(
                                 {
