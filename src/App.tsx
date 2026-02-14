@@ -182,6 +182,16 @@ function App() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // 注册状态
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+
+  // 密码重置状态
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [resetPasswordSuccess, setResetPasswordSuccess] = useState<string | null>(null);
+
   // 访问模式状态 (readonly: 访客模式, edit: 编辑模式)
   type ViewMode = 'readonly' | 'edit';
   const [viewMode, setViewMode] = useState<ViewMode>('readonly');
@@ -354,6 +364,50 @@ function App() {
       setViewMode('readonly');
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  // 注册功能
+  const handleRegister = async (username: string, password: string) => {
+    try {
+      setRegisterLoading(true);
+      setRegisterError(null);
+      setRegisterSuccess(null);
+
+      const result = await api.register(username, password);
+
+      if (result?.success) {
+        setRegisterSuccess(result.message || '注册成功，请返回登录');
+      } else {
+        setRegisterError(result?.message || '注册失败');
+      }
+    } catch (error) {
+      console.error('注册失败:', error);
+      setRegisterError('注册失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setRegisterLoading(false);
+    }
+  };
+
+  // 密码重置功能
+  const handleResetPassword = async (username: string, newPassword: string) => {
+    try {
+      setResetPasswordLoading(true);
+      setResetPasswordError(null);
+      setResetPasswordSuccess(null);
+
+      const result = await api.resetPassword(username, newPassword);
+
+      if (result?.success) {
+        setResetPasswordSuccess(result.message || '密码重置成功，请返回登录');
+      } else {
+        setResetPasswordError(result?.message || '密码重置失败');
+      }
+    } catch (error) {
+      console.error('密码重置失败:', error);
+      setResetPasswordError('密码重置失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setResetPasswordLoading(false);
     }
   };
 
@@ -1106,7 +1160,19 @@ function App() {
           bgcolor: 'background.default',
         }}
       >
-        <LoginForm onLogin={handleLogin} loading={loginLoading} error={loginError} />
+        <LoginForm
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onResetPassword={handleResetPassword}
+          loading={loginLoading}
+          error={loginError}
+          registerLoading={registerLoading}
+          registerError={registerError}
+          registerSuccess={registerSuccess}
+          resetPasswordLoading={resetPasswordLoading}
+          resetPasswordError={resetPasswordError}
+          resetPasswordSuccess={resetPasswordSuccess}
+        />
       </Box>
     );
   };

@@ -1,4 +1,4 @@
-import { Group, Site, LoginResponse, ExportData, ImportResult, GroupWithSites } from './http';
+import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites } from './http';
 import { mockGroups as importedMockGroups, mockSites as importedMockSites, mockConfigs as importedMockConfigs } from './mockData';
 
 // 本地存储键名
@@ -104,6 +104,32 @@ export class MockNavigationClient {
       success: true,
       token: token,
       message: `登录成功(模拟环境)${rememberMe ? '，已记住登录状态' : ''}`,
+    };
+  }
+
+  // 注册API
+  async register(
+    username: string,
+    password: string
+  ): Promise<RegisterResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log('模拟注册:', username, password);
+    return {
+      success: true,
+      message: '注册成功(模拟环境)',
+    };
+  }
+
+  // 密码重置API
+  async resetPassword(
+    username: string,
+    newPassword: string
+  ): Promise<ResetPasswordResponse> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log('模拟密码重置:', username, newPassword);
+    return {
+      success: true,
+      message: '密码重置成功(模拟环境)',
     };
   }
 

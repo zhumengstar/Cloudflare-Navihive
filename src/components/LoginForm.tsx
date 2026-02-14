@@ -9,23 +9,123 @@ import {
   Paper,
   FormControlLabel,
   Checkbox,
+  Link,
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
+import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
+
+type FormMode = 'login' | 'register' | 'resetPassword';
 
 interface LoginFormProps {
   onLogin: (username: string, password: string, rememberMe: boolean) => void;
+  onRegister: (username: string, password: string) => void;
+  onResetPassword: (username: string, newPassword: string) => void;
   loading?: boolean;
   error?: string | null;
+  registerLoading?: boolean;
+  registerError?: string | null;
+  registerSuccess?: string | null;
+  resetPasswordLoading?: boolean;
+  resetPasswordError?: string | null;
+  resetPasswordSuccess?: string | null;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({ onLogin, loading = false, error = null }) => {
+const LoginForm: React.FC<LoginFormProps> = ({
+  onLogin,
+  onRegister,
+  onResetPassword,
+  loading = false,
+  error = null,
+  registerLoading = false,
+  registerError = null,
+  registerSuccess = null,
+  resetPasswordLoading = false,
+  resetPasswordError = null,
+  resetPasswordSuccess = null,
+}) => {
+  const [mode, setMode] = useState<FormMode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setUsername('');
+    setPassword('');
+    setConfirmPassword('');
+    setRememberMe(false);
+    setLocalError(null);
+  };
+
+  const switchMode = (newMode: FormMode) => {
+    resetForm();
+    setMode(newMode);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(username, password, rememberMe);
+    setLocalError(null);
+
+    if (mode === 'login') {
+      onLogin(username, password, rememberMe);
+    } else if (mode === 'register') {
+      if (password !== confirmPassword) {
+        setLocalError('两次输入的密码不一致');
+        return;
+      }
+      if (password.length < 6) {
+        setLocalError('密码长度至少为6个字符');
+        return;
+      }
+      onRegister(username, password);
+    } else if (mode === 'resetPassword') {
+      if (password !== confirmPassword) {
+        setLocalError('两次输入的新密码不一致');
+        return;
+      }
+      if (password.length < 6) {
+        setLocalError('密码长度至少为6个字符');
+        return;
+      }
+      onResetPassword(username, password);
+    }
+  };
+
+  const isLoading = mode === 'login' ? loading : mode === 'register' ? registerLoading : resetPasswordLoading;
+  const currentError = localError || (mode === 'login' ? error : mode === 'register' ? registerError : resetPasswordError);
+  const currentSuccess = mode === 'register' ? registerSuccess : mode === 'resetPassword' ? resetPasswordSuccess : null;
+
+  const getTitle = () => {
+    switch (mode) {
+      case 'login': return '导航站登录';
+      case 'register': return '注册账号';
+      case 'resetPassword': return '重置密码';
+    }
+  };
+
+  const getIcon = () => {
+    switch (mode) {
+      case 'login': return <LockOutlinedIcon fontSize='large' />;
+      case 'register': return <PersonAddOutlinedIcon fontSize='large' />;
+      case 'resetPassword': return <LockResetOutlinedIcon fontSize='large' />;
+    }
+  };
+
+  const getButtonText = () => {
+    switch (mode) {
+      case 'login': return '登录';
+      case 'register': return '注册';
+      case 'resetPassword': return '重置密码';
+    }
+  };
+
+  const isSubmitDisabled = () => {
+    if (isLoading) return true;
+    if (!username || !password) return true;
+    if ((mode === 'register' || mode === 'resetPassword') && !confirmPassword) return true;
+    return false;
   };
 
   return (
@@ -76,16 +176,22 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, loading = false, error =
               color: 'white',
             }}
           >
-            <LockOutlinedIcon fontSize='large' />
+            {getIcon()}
           </Box>
           <Typography component='h1' variant='h5' fontWeight='bold' textAlign='center'>
-            导航站登录
+            {getTitle()}
           </Typography>
         </Box>
 
-        {error && (
-          <Alert severity='error' sx={{ mb: 3 }}>
-            {error}
+        {currentError && (
+          <Alert severity='error' sx={{ mb: 2 }}>
+            {currentError}
+          </Alert>
+        )}
+
+        {currentSuccess && (
+          <Alert severity='success' sx={{ mb: 2 }}>
+            {currentSuccess}
           </Alert>
         )}
 
@@ -101,7 +207,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, loading = false, error =
             autoFocus
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            disabled={loading}
+            disabled={isLoading}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -109,44 +215,115 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, loading = false, error =
             required
             fullWidth
             name='password'
-            label='密码'
+            label={mode === 'resetPassword' ? '新密码' : '密码'}
             type='password'
             id='password'
-            autoComplete='current-password'
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
+            disabled={isLoading}
             sx={{ mb: 2 }}
           />
-          <FormControlLabel
-            control={
-              <Checkbox
-                value='remember'
-                color='primary'
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                disabled={loading}
-              />
-            }
-            label='记住我（一个月内免登录）'
-            sx={{ mb: 2 }}
-          />
+
+          {/* 注册和密码重置模式：确认密码 */}
+          {(mode === 'register' || mode === 'resetPassword') && (
+            <TextField
+              margin='normal'
+              required
+              fullWidth
+              name='confirmPassword'
+              label={mode === 'resetPassword' ? '确认新密码' : '确认密码'}
+              type='password'
+              id='confirmPassword'
+              autoComplete='new-password'
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={isLoading}
+              sx={{ mb: 2 }}
+            />
+          )}
+
+          {/* 登录模式：记住我 */}
+          {mode === 'login' && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  value='remember'
+                  color='primary'
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={isLoading}
+                />
+              }
+              label='记住我（一个月内免登录）'
+              sx={{ mb: 2 }}
+            />
+          )}
+
           <Button
             type='submit'
             fullWidth
             variant='contained'
             color='primary'
-            disabled={loading || !username || !password}
+            disabled={isSubmitDisabled()}
             size='large'
             sx={{
               py: 1.5,
-              mt: 2,
+              mt: 1,
               mb: 2,
               borderRadius: 2,
             }}
           >
-            {loading ? <CircularProgress size={24} color='inherit' /> : '登录'}
+            {isLoading ? <CircularProgress size={24} color='inherit' /> : getButtonText()}
           </Button>
+
+          {/* 底部链接 */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+            {mode === 'login' && (
+              <>
+                <Link
+                  component='button'
+                  type='button'
+                  variant='body2'
+                  onClick={() => switchMode('register')}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  没有账号？注册一个
+                </Link>
+                <Link
+                  component='button'
+                  type='button'
+                  variant='body2'
+                  onClick={() => switchMode('resetPassword')}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  忘记密码？
+                </Link>
+              </>
+            )}
+            {mode === 'register' && (
+              <Link
+                component='button'
+                type='button'
+                variant='body2'
+                onClick={() => switchMode('login')}
+                sx={{ cursor: 'pointer' }}
+              >
+                已有账号？返回登录
+              </Link>
+            )}
+            {mode === 'resetPassword' && (
+              <Link
+                component='button'
+                type='button'
+                variant='body2'
+                onClick={() => switchMode('login')}
+                sx={{ cursor: 'pointer' }}
+              >
+                返回登录
+              </Link>
+            )}
+          </Box>
         </Box>
       </Paper>
     </Box>

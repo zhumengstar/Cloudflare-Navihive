@@ -1,6 +1,6 @@
 // src/api/http.ts
 // 不使用外部JWT库，改为内置的crypto API
-import { compareSync } from 'bcrypt-edge';
+import { compareSync, hashSync } from 'bcrypt-edge';
 
 // 定义D1数据库类型
 interface D1Database {
@@ -111,6 +111,28 @@ export interface LoginResponse {
   message?: string;
 }
 
+// 注册接口
+export interface RegisterRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  message?: string;
+}
+
+// 密码重置接口
+export interface ResetPasswordRequest {
+  username: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  success: boolean;
+  message?: string;
+}
+
 // API 类
 export class NavigationAPI {
   private db: D1Database;
@@ -133,14 +155,44 @@ export class NavigationAPI {
     // 尝试自动修复缺失的字段 (即使已初始化也尝试执行，以修复旧版本数据库)
     try {
       await this.db.exec('ALTER TABLE groups ADD COLUMN is_public INTEGER DEFAULT 1;');
-    } catch {}
+    } catch { }
     try {
       await this.db.exec('ALTER TABLE sites ADD COLUMN is_public INTEGER DEFAULT 1;');
-    } catch {}
+    } catch { }
     try {
       await this.db.exec('CREATE INDEX IF NOT EXISTS idx_groups_is_public ON groups(is_public);');
       await this.db.exec('CREATE INDEX IF NOT EXISTS idx_sites_is_public ON sites(is_public);');
-    } catch {}
+    } catch { }
+
+    // 创建 users 表（即使已初始化也尝试创建，以支持旧版本升级）
+    try {
+      await this.db.exec(
+        `CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          role TEXT DEFAULT 'user',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );`
+      );
+    } catch { }
+
+    // 迁移环境变量中的管理员到 users 表
+    try {
+      if (this.username && this.passwordHash) {
+        const existingAdmin = await this.db
+          .prepare('SELECT id FROM users WHERE username = ?')
+          .bind(this.username)
+          .first();
+        if (!existingAdmin) {
+          await this.db
+            .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+            .bind(this.username, this.passwordHash, 'admin')
+            .run();
+        }
+      }
+    } catch { }
 
     // 首先检查数据库是否已初始化
     try {
@@ -187,34 +239,109 @@ export class NavigationAPI {
       };
     }
 
-    // 验证用户名
-    if (loginRequest.username !== this.username) {
-      return {
-        success: false,
-        message: '用户名或密码错误',
-      };
+    // 优先从 users 表查询用户
+    try {
+      const user = await this.db
+        .prepare('SELECT id, username, password_hash, role FROM users WHERE username = ?')
+        .bind(loginRequest.username)
+        .first<{ id: number; username: string; password_hash: string; role: string }>();
+
+      if (user) {
+        const isPasswordValid = compareSync(loginRequest.password, user.password_hash);
+        if (isPasswordValid) {
+          const token = await this.generateToken(
+            { username: user.username, role: user.role },
+            loginRequest.rememberMe || false
+          );
+          return { success: true, token, message: '登录成功' };
+        }
+        return { success: false, message: '用户名或密码错误' };
+      }
+    } catch {
+      // users 表可能不存在（旧版数据库），回退到环境变量认证
     }
 
-    // 使用 bcrypt 验证密码
-    const isPasswordValid = compareSync(loginRequest.password, this.passwordHash);
+    // 回退：使用环境变量中的管理员账号（兼容旧版）
+    if (loginRequest.username !== this.username) {
+      return { success: false, message: '用户名或密码错误' };
+    }
 
+    const isPasswordValid = compareSync(loginRequest.password, this.passwordHash);
     if (isPasswordValid) {
-      // 生成JWT令牌，传递记住我参数
       const token = await this.generateToken(
         { username: loginRequest.username },
         loginRequest.rememberMe || false
       );
-      return {
-        success: true,
-        token,
-        message: '登录成功',
-      };
+      return { success: true, token, message: '登录成功' };
     }
 
-    return {
-      success: false,
-      message: '用户名或密码错误',
-    };
+    return { success: false, message: '用户名或密码错误' };
+  }
+
+  // 注册新用户
+  async register(request: RegisterRequest): Promise<RegisterResponse> {
+    try {
+      // 检查用户名是否已存在
+      const existing = await this.db
+        .prepare('SELECT id FROM users WHERE username = ?')
+        .bind(request.username)
+        .first();
+
+      if (existing) {
+        return { success: false, message: '用户名已存在' };
+      }
+
+      // bcrypt 哈希密码
+      const passwordHash = hashSync(request.password, 10);
+
+      // 插入新用户
+      await this.db
+        .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+        .bind(request.username, passwordHash, 'user')
+        .run();
+
+      return { success: true, message: '注册成功' };
+    } catch (error) {
+      console.error('注册失败:', error);
+      return { success: false, message: '注册失败，请稍后重试' };
+    }
+  }
+
+  // 重置密码
+  async resetPassword(request: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+    try {
+      // 查找用户
+      const user = await this.db
+        .prepare('SELECT id FROM users WHERE username = ?')
+        .bind(request.username)
+        .first<{ id: number }>();
+
+      if (!user) {
+        // 也检查环境变量中的管理员
+        if (request.username === this.username) {
+          // 更新环境变量管理员的密码 —— 需要将其迁移到 users 表
+          const passwordHash = hashSync(request.newPassword, 10);
+          await this.db
+            .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET password_hash = ?, updated_at = CURRENT_TIMESTAMP')
+            .bind(request.username, passwordHash, 'admin', passwordHash)
+            .run();
+          return { success: true, message: '密码重置成功' };
+        }
+        return { success: false, message: '用户名不存在' };
+      }
+
+      // 更新密码
+      const passwordHash = hashSync(request.newPassword, 10);
+      await this.db
+        .prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .bind(passwordHash, user.id)
+        .run();
+
+      return { success: true, message: '密码重置成功' };
+    } catch (error) {
+      console.error('密码重置失败:', error);
+      return { success: false, message: '密码重置失败，请稍后重试' };
+    }
   }
 
   // 验证令牌有效性

@@ -1,6 +1,8 @@
 import {
     NavigationAPI,
     type LoginRequest,
+    type RegisterRequest,
+    type ResetPasswordRequest,
     type ExportData,
     type Group,
     type Site,
@@ -458,6 +460,104 @@ export default {
                             },
                         }
                     );
+                }
+
+                // 注册路由 - 不需要验证，开放注册
+                if (path === "register" && method === "POST") {
+                    try {
+                        // 速率限制检查
+                        const clientIP = request.headers.get('CF-Connecting-IP') ||
+                            request.headers.get('X-Forwarded-For') ||
+                            'unknown';
+
+                        if (!loginRateLimiter.check(clientIP)) {
+                            return createJsonResponse(
+                                {
+                                    success: false,
+                                    message: '操作过于频繁，请稍后再试 (15分钟内最多5次)',
+                                },
+                                request,
+                                { status: 429 }
+                            );
+                        }
+
+                        const registerData = (await validateRequestBody(request)) as RegisterInput;
+
+                        const validation = validateRegister(registerData);
+                        if (!validation.valid) {
+                            return createJsonResponse(
+                                {
+                                    success: false,
+                                    message: `验证失败: ${validation.errors?.join(", ")}`,
+                                },
+                                request,
+                                { status: 400 }
+                            );
+                        }
+
+                        const result = await api.register(registerData as RegisterRequest);
+                        return createJsonResponse(result, request, {
+                            status: result.success ? 200 : 400,
+                        });
+                    } catch (error) {
+                        return createJsonResponse(
+                            {
+                                success: false,
+                                message: error instanceof Error ? error.message : '请求无效',
+                            },
+                            request,
+                            { status: 400 }
+                        );
+                    }
+                }
+
+                // 密码重置路由 - 不需要验证，任何人可遍以重置
+                if (path === "reset-password" && method === "POST") {
+                    try {
+                        // 速率限制检查
+                        const clientIP = request.headers.get('CF-Connecting-IP') ||
+                            request.headers.get('X-Forwarded-For') ||
+                            'unknown';
+
+                        if (!loginRateLimiter.check(clientIP)) {
+                            return createJsonResponse(
+                                {
+                                    success: false,
+                                    message: '操作过于频繁，请稍后再试 (15分钟内最多5次)',
+                                },
+                                request,
+                                { status: 429 }
+                            );
+                        }
+
+                        const resetData = (await validateRequestBody(request)) as ResetPasswordInput;
+
+                        const validation = validateResetPassword(resetData);
+                        if (!validation.valid) {
+                            return createJsonResponse(
+                                {
+                                    success: false,
+                                    message: `验证失败: ${validation.errors?.join(", ")}`,
+                                },
+                                request,
+                                { status: 400 }
+                            );
+                        }
+
+                        const result = await api.resetPassword(resetData as ResetPasswordRequest);
+                        return createJsonResponse(result, request, {
+                            status: result.success ? 200 : 400,
+                        });
+                    } catch (error) {
+                        return createJsonResponse(
+                            {
+                                success: false,
+                                message: error instanceof Error ? error.message : '请求无效',
+                            },
+                            request,
+                            { status: 400 }
+                        );
+                    }
                 }
 
                 // 认证状态检查端点 - 检查当前用户是否已认证
@@ -1062,6 +1162,52 @@ function validateLogin(data: LoginInput): { valid: boolean; errors?: string[] } 
 
     if (data.rememberMe !== undefined && typeof data.rememberMe !== "boolean") {
         errors.push("记住我选项必须是布尔值");
+    }
+
+    return { valid: errors.length === 0, errors };
+}
+
+interface RegisterInput {
+    username?: string;
+    password?: string;
+}
+
+function validateRegister(data: RegisterInput): { valid: boolean; errors?: string[] } {
+    const errors: string[] = [];
+
+    if (!data.username || typeof data.username !== "string") {
+        errors.push("用户名不能为空且必须是字符串");
+    } else if (data.username.length < 2 || data.username.length > 32) {
+        errors.push("用户名长度必须在2-32个字符之间");
+    } else if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(data.username)) {
+        errors.push("用户名只能包含字母、数字、下划线和中文");
+    }
+
+    if (!data.password || typeof data.password !== "string") {
+        errors.push("密码不能为空且必须是字符串");
+    } else if (data.password.length < 6 || data.password.length > 64) {
+        errors.push("密码长度必须在6-64个字符之间");
+    }
+
+    return { valid: errors.length === 0, errors };
+}
+
+interface ResetPasswordInput {
+    username?: string;
+    newPassword?: string;
+}
+
+function validateResetPassword(data: ResetPasswordInput): { valid: boolean; errors?: string[] } {
+    const errors: string[] = [];
+
+    if (!data.username || typeof data.username !== "string") {
+        errors.push("用户名不能为空且必须是字符串");
+    }
+
+    if (!data.newPassword || typeof data.newPassword !== "string") {
+        errors.push("新密码不能为空且必须是字符串");
+    } else if (data.newPassword.length < 6 || data.newPassword.length > 64) {
+        errors.push("密码长度必须在6-64个字符之间");
     }
 
     return { valid: errors.length === 0, errors };

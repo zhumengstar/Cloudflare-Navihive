@@ -1,4 +1,4 @@
-import { Group, Site, LoginResponse, ExportData, ImportResult, GroupWithSites } from './http';
+import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites } from './http';
 
 export class NavigationClient {
   private baseUrl: string;
@@ -45,6 +45,42 @@ export class NavigationClient {
         success: false,
         message: '登录请求失败，请检查网络连接',
       };
+    }
+  }
+
+  // 注册API
+  async register(username: string, password: string): Promise<RegisterResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data: RegisterResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error('注册失败:', error);
+      return { success: false, message: '注册请求失败，请检查网络连接' };
+    }
+  }
+
+  // 密码重置API
+  async resetPassword(username: string, newPassword: string): Promise<ResetPasswordResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username, newPassword }),
+      });
+
+      const data: ResetPasswordResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error('密码重置失败:', error);
+      return { success: false, message: '密码重置请求失败，请检查网络连接' };
     }
   }
 
