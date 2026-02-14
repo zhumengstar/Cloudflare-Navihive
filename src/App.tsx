@@ -7,6 +7,8 @@ import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
 import SiteCard from './components/SiteCard';
 import LoginForm from './components/LoginForm';
+import VisitorHome from './components/VisitorHome';
+import UserAvatar from './components/UserAvatar';
 import SearchBox from './components/SearchBox';
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
 import { SearchResultItem } from './utils/search';
@@ -73,20 +75,19 @@ import CloseIcon from '@mui/icons-material/Close';
 import SettingsIcon from '@mui/icons-material/Settings';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 // 根据环境选择使用真实API还是模拟API
-const isDevEnvironment = import.meta.env.DEV;
-const useRealApi = import.meta.env.VITE_USE_REAL_API === 'true';
+// @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
+// 设置 VITE_USE_MOCK=true 可以回退到 mock 模式
+const useMockApi = import.meta.env.VITE_USE_MOCK === 'true';
 
-const api =
-  isDevEnvironment && !useRealApi
-    ? new MockNavigationClient()
-    : new NavigationClient(isDevEnvironment ? 'http://localhost:8788/api' : '/api');
+const api = useMockApi
+  ? new MockNavigationClient()
+  : new NavigationClient('/api');
 
 // 排序模式枚举
 enum SortMode {
@@ -179,6 +180,7 @@ function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isAuthRequired, setIsAuthRequired] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -200,6 +202,9 @@ function App() {
   const [configs, setConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
   const [openConfig, setOpenConfig] = useState(false);
   const [tempConfigs, setTempConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
+
+  // 登录界面状态
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   // 配置传感器，支持鼠标、触摸和键盘操作
   const sensors = useSensors(
@@ -276,6 +281,9 @@ function App() {
       setIsAuthChecking(true);
       console.log('开始检查认证状态...');
 
+      // 确保数据库已初始化
+      await api.initDB();
+
       // 尝试进行API调用,检查是否需要认证
       const result = await api.checkAuthStatus();
       console.log('认证检查结果:', result);
@@ -303,6 +311,7 @@ function App() {
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
+        setUsername('admin'); // 默认用户名
 
         // 加载所有数据（包括私密内容）
         console.log('已认证，开始加载数据');
@@ -344,10 +353,14 @@ function App() {
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
+        setUsername(username);
 
         // 重新加载数据（包括私密内容）
         await fetchData();
         await fetchConfigs();
+
+        // 关闭登录界面
+        setIsLoginOpen(false);
       } else {
         // 登录失败
         const message = loginResponse?.message || '用户名或密码错误';
@@ -448,8 +461,19 @@ function App() {
   };
 
   useEffect(() => {
-    // 检查认证状态
-    checkAuthStatus();
+    const init = async () => {
+      // 初始化数据库（检查迁移）
+      await api.initDB();
+      // 检查认证状态
+      await checkAuthStatus();
+
+      // 检查 URL 参数是否请求登录 (隐式入口)
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('login') !== null || params.get('admin') !== null) {
+        setIsLoginOpen(true);
+      }
+    };
+    init();
 
     // 确保初始化时重置排序状态
     setSortMode(SortMode.None);
@@ -1155,6 +1179,7 @@ function App() {
         sx={{
           minHeight: '100vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           bgcolor: 'background.default',
@@ -1173,6 +1198,16 @@ function App() {
           resetPasswordError={resetPasswordError}
           resetPasswordSuccess={resetPasswordSuccess}
         />
+        {/* 如果不是强制认证（比如访客模式点击登录），显示返回按钮 */}
+        {!isAuthenticated && (
+          <Button
+            onClick={() => setIsLoginOpen(false)}
+            sx={{ mt: 2 }}
+            variant="text"
+          >
+            返回访客模式
+          </Button>
+        )}
       </Box>
     );
   };
@@ -1197,8 +1232,8 @@ function App() {
     );
   }
 
-  // 如果需要认证但未认证，显示登录界面
-  if (isAuthRequired && !isAuthenticated) {
+  // 显式显示登录界面
+  if (isLoginOpen) {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
@@ -1406,19 +1441,8 @@ function App() {
               ) : (
                 <>
                   {viewMode === 'readonly' ? (
-                    // 访客模式：显示登录按钮
-                    <Button
-                      variant='contained'
-                      color='primary'
-                      onClick={() => setIsAuthRequired(true)}
-                      size='small'
-                      sx={{
-                        minWidth: 'auto',
-                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      }}
-                    >
-                      管理员登录
-                    </Button>
+                    // 访客模式：隐藏登录按钮 (通过 URL ?login=1 进入)
+                    null
                   ) : (
                     // 编辑模式：显示管理按钮
                     <>
@@ -1492,169 +1516,177 @@ function App() {
                           </ListItemIcon>
                           <ListItemText>导入数据</ListItemText>
                         </MenuItem>
-                        {isAuthenticated && (
-                          <>
-                            <Divider />
-                            <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
-                              <ListItemIcon sx={{ color: 'error.main' }}>
-                                <LogoutIcon fontSize='small' />
-                              </ListItemIcon>
-                              <ListItemText>退出登录</ListItemText>
-                            </MenuItem>
-                          </>
-                        )}
                       </Menu>
                     </>
                   )}
                 </>
               )}
               <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} />
+              {isAuthenticated && (
+                <UserAvatar
+                  username={username}
+                  onLogout={handleLogout}
+                />
+              )}
             </Stack>
           </Box>
 
-          {/* 搜索框 - 根据配置条件渲染 */}
-          {(() => {
-            // 检查搜索框是否启用
-            const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
-            if (!searchBoxEnabled) {
-              return null;
-            }
-
-            // 如果是访客模式，检查访客是否可用搜索框
-            if (viewMode === 'readonly') {
-              const guestEnabled = configs['site.searchBoxGuestEnabled'] === 'true';
-              if (!guestEnabled) {
-                return null;
-              }
-            }
-
-            return (
-              <Box sx={{ mb: 4 }}>
-                <SearchBox
-                  groups={groups}
-                  sites={groups.flatMap((g) => g.sites || [])}
-                  onDelete={isAuthenticated ? handleSiteDelete : undefined}
-                  onInternalResultClick={(result: SearchResultItem) => {
-                    // 可选：滚动到对应的元素
-                    if (result.type === 'group') {
-                      const groupElement = document.getElementById(`group-${result.id}`);
-                      groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    } else if (result.type === 'site' && result.groupId) {
-                      const groupElement = document.getElementById(`group-${result.groupId}`);
-                      groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }}
-                />
-              </Box>
-            );
-          })()}
-
-          {loading && (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '200px',
+          {!isAuthenticated ? (
+            <VisitorHome
+              api={api}
+              onLoginClick={() => {
+                console.log('VisitorHome onLoginClick triggered');
+                setIsLoginOpen(true);
               }}
-            >
-              <CircularProgress size={60} thickness={4} />
-            </Box>
-          )}
+            />
+          ) : (
+            <>
+              {/* 搜索框 - 根据配置条件渲染 */}
+              {(() => {
+                // 检查搜索框是否启用
+                const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
+                if (!searchBoxEnabled) {
+                  return null;
+                }
 
-          {!loading && !error && (
-            <Box
-              sx={{
-                '& > *': { mb: 5 },
-                minHeight: '100px',
-              }}
-            >
-              {sortMode === SortMode.GroupSort ? (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                  onDragStart={handleDragStart}
-                >
-                  <SortableContext
-                    items={groups.map((group) => group.id.toString())}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <Stack
-                      spacing={2}
-                      sx={{
-                        '& > *': {
-                          transition: 'none',
-                        },
+                // 如果是访客模式，检查访客是否可用搜索框
+                if (viewMode === 'readonly') {
+                  const guestEnabled = configs['site.searchBoxGuestEnabled'] === 'true';
+                  if (!guestEnabled) {
+                    return null;
+                  }
+                }
+
+                return (
+                  <Box sx={{ mb: 4 }}>
+                    <SearchBox
+                      groups={groups}
+                      sites={groups.flatMap((g) => g.sites || [])}
+                      onDelete={isAuthenticated ? handleSiteDelete : undefined}
+                      onInternalResultClick={(result: SearchResultItem) => {
+                        // 可选：滚动到对应的元素
+                        if (result.type === 'group') {
+                          const groupElement = document.getElementById(`group-${result.id}`);
+                          groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        } else if (result.type === 'site' && result.groupId) {
+                          const groupElement = document.getElementById(`group-${result.groupId}`);
+                          groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
                       }}
-                    >
-                      {groups.map((group) => (
-                        <SortableGroupItem key={group.id} id={group.id.toString()} group={group} />
-                      ))}
-                    </Stack>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleCrossGroupDragEnd}
-                  onDragOver={handleSiteDragOver}
-                  onDragStart={handleDragStart}
+                    />
+                  </Box>
+                );
+              })()}
+
+              {loading && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    height: '200px',
+                  }}
                 >
-                  <Stack spacing={5}>
-                    {groups.map((group) => (
-                      <Box key={`group-${group.id}`} id={`group-${group.id}`}>
-                        <GroupCard
-                          group={group}
-                          sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
-                          currentSortingGroupId={currentSortingGroupId}
-                          viewMode={viewMode}
-                          onUpdate={handleSiteUpdate}
-                          onDelete={handleSiteDelete}
-                          onSaveSiteOrder={handleSaveSiteOrder}
-                          onStartSiteSort={startSiteSort}
-                          onAddSite={handleOpenAddSite}
-                          onUpdateGroup={handleGroupUpdate}
-                          onDeleteGroup={handleGroupDelete}
-                          configs={configs}
-                          onSiteDragOver={handleSiteDragOver}
-                          draggedSiteId={draggedSiteId}
-                        />
-                      </Box>
-                    ))}
-                  </Stack>
-                  <DragOverlay dropAnimation={null}>
-                    {activeSite && (
-                      <Box
-                        sx={{
-                          width: {
-                            xs: 200,
-                            sm: 220,
-                            md: 250,
-                            lg: 280,
-                            xl: 300,
-                          },
-                          padding: 1,
-                          boxSizing: 'border-box',
-                          cursor: 'grabbing',
-                          opacity: 0.95,
-                        }}
-                      >
-                        <SiteCard
-                          site={activeSite}
-                          onUpdate={() => { }}
-                          onDelete={() => { }}
-                          isEditMode={false}
-                          viewMode={viewMode}
-                          iconApi={configs?.['site.iconApi']}
-                        />
-                      </Box>
-                    )}
-                  </DragOverlay>
-                </DndContext>
+                  <CircularProgress size={60} thickness={4} />
+                </Box>
               )}
-            </Box>
+
+              {!loading && !error && (
+                <Box
+                  sx={{
+                    '& > *': { mb: 5 },
+                    minHeight: '100px',
+                  }}
+                >
+                  {sortMode === SortMode.GroupSort ? (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                      onDragStart={handleDragStart}
+                    >
+                      <SortableContext
+                        items={groups.map((group) => group.id.toString())}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <Stack
+                          spacing={2}
+                          sx={{
+                            '& > *': {
+                              transition: 'none',
+                            },
+                          }}
+                        >
+                          {groups.map((group) => (
+                            <SortableGroupItem key={group.id} id={group.id.toString()} group={group} />
+                          ))}
+                        </Stack>
+                      </SortableContext>
+                    </DndContext>
+                  ) : (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleCrossGroupDragEnd}
+                      onDragOver={handleSiteDragOver}
+                      onDragStart={handleDragStart}
+                    >
+                      <Stack spacing={5}>
+                        {groups.map((group) => (
+                          <Box key={`group-${group.id}`} id={`group-${group.id}`}>
+                            <GroupCard
+                              group={group}
+                              sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
+                              currentSortingGroupId={currentSortingGroupId}
+                              viewMode={viewMode}
+                              onUpdate={handleSiteUpdate}
+                              onDelete={handleSiteDelete}
+                              onSaveSiteOrder={handleSaveSiteOrder}
+                              onStartSiteSort={startSiteSort}
+                              onAddSite={handleOpenAddSite}
+                              onUpdateGroup={handleGroupUpdate}
+                              onDeleteGroup={handleGroupDelete}
+                              configs={configs}
+                              onSiteDragOver={handleSiteDragOver}
+                              draggedSiteId={draggedSiteId}
+                            />
+                          </Box>
+                        ))}
+                      </Stack>
+                      <DragOverlay dropAnimation={null}>
+                        {activeSite && (
+                          <Box
+                            sx={{
+                              width: {
+                                xs: 200,
+                                sm: 220,
+                                md: 250,
+                                lg: 280,
+                                xl: 300,
+                              },
+                              padding: 1,
+                              boxSizing: 'border-box',
+                              cursor: 'grabbing',
+                              opacity: 0.95,
+                            }}
+                          >
+                            <SiteCard
+                              site={activeSite}
+                              onUpdate={() => { }}
+                              onDelete={() => { }}
+                              isEditMode={false}
+                              viewMode={viewMode}
+                              iconApi={configs?.['site.iconApi']}
+                            />
+                          </Box>
+                        )}
+                      </DragOverlay>
+                    </DndContext>
+                  )}
+                </Box>
+              )}
+
+            </>
           )}
 
           {/* 新增分组对话框 */}

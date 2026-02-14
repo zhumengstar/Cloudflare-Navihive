@@ -614,6 +614,7 @@ export default {
 
                 // 验证中间件 - 条件认证
                 let isAuthenticated = false; // 记录认证状态
+                let currentUserId: number | undefined;
 
                 if (api.isAuthEnabled()) {
                     const requestPath = `/api/${path}`;
@@ -623,7 +624,10 @@ export default {
                         (route) => route.method === method && route.path === requestPath
                     );
 
-                    const shouldRequireAuth = !isReadOnlyRoute || env.AUTH_REQUIRED_FOR_READ === 'true';
+                    // 访客模式的随机推荐接口始终公开
+                    const isPublicRoute = path === "sites/random" && method === "GET";
+
+                    const shouldRequireAuth = !isPublicRoute && (!isReadOnlyRoute || env.AUTH_REQUIRED_FOR_READ === 'true');
 
                     // 总是检查 token（如果存在）
                     const cookieHeader = request.headers.get("Cookie");
@@ -660,10 +664,11 @@ export default {
                             const verifyResult = await api.verifyToken(token);
                             if (verifyResult.valid) {
                                 isAuthenticated = true; // 认证成功
+                                currentUserId = verifyResult.payload?.id as number;
                                 log({
                                     timestamp: new Date().toISOString(),
                                     level: 'info',
-                                    message: `已认证用户访问: ${method} ${requestPath}`,
+                                    message: `已认证用户访问: ${method} ${requestPath} (User ID: ${currentUserId})`,
                                 });
                             }
                         } catch (error) {
@@ -700,11 +705,14 @@ export default {
                 // 路由匹配
                 // GET /api/groups-with-sites 获取所有分组及其站点 (优化 N+1 查询)
                 if (path === "groups-with-sites" && method === "GET") {
-                    const groupsWithSites = await api.getGroupsWithSites();
+                    // 如果已登录，获取该用户的分组；否则获取所有（后续过滤）
+                    const groupsWithSites = await api.getGroupsWithSites(currentUserId);
 
                     // 根据认证状态过滤数据
                     if (!isAuthenticated) {
                         // 未认证用户只能看到公开分组下的公开站点
+                        // 也可以选择返回空，或者只返回"官方/推荐"分组
+                        // 这里我们过滤出所有公开的内容
                         const filteredGroups = groupsWithSites
                             .filter(group => group.is_public === 1)
                             .map(group => ({
@@ -715,6 +723,24 @@ export default {
                     }
 
                     return createJsonResponse(groupsWithSites, request);
+                }
+                // GET /api/sites/random 随机获取站点（访客模式）
+                else if (path === "sites/random" && method === "GET") {
+                    const url = new URL(request.url);
+                    const limit = parseInt(url.searchParams.get('limit') || '20');
+                    // 限制最大数量
+                    const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+                    try {
+                        const sites = await api.getRandomSites(safeLimit);
+                        return createJsonResponse(sites, request);
+                    } catch (error) {
+                        return createJsonResponse(
+                            { error: "获取随机站点失败" },
+                            request,
+                            { status: 500 }
+                        );
+                    }
                 }
                 // GET /api/groups 获取所有分组
                 else if (path === "groups" && method === "GET") {
@@ -759,7 +785,7 @@ export default {
                         );
                     }
 
-                    const result = await api.createGroup(validation.sanitizedData as Group);
+                    const result = await api.createGroup(validation.sanitizedData as Group, currentUserId);
                     return createJsonResponse(result, request);
                 } else if (path.startsWith("groups/") && method === "PUT") {
                     const idStr = path.split("/")[1];

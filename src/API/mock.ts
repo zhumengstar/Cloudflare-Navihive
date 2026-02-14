@@ -138,6 +138,11 @@ export class MockNavigationClient {
     this.clearToken();
   }
 
+  // 初始化数据库（模拟）
+  async initDB(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
   // 检查身份验证状态
   async checkAuthStatus(): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -163,6 +168,28 @@ export class MockNavigationClient {
       return mockGroups.filter((g) => g.is_public === 1);
     }
     return [...mockGroups];
+  }
+
+  // 获取随机推荐站点
+  async getRandomSites(limit: number = 20): Promise<{
+    site: Site;
+    groupName: string;
+    ownerName: string;
+  }[]> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // 随机选择站点
+    const shuffled = [...mockSites].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, limit);
+
+    return selected.map(site => {
+      const group = mockGroups.find(g => g.id === site.group_id);
+      return {
+        site,
+        groupName: group?.name || '未知分组',
+        ownerName: 'MockUser'
+      };
+    });
   }
 
   // 获取所有分组及其站点 (使用 JOIN 优化,避免 N+1 查询)

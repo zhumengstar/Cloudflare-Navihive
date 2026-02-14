@@ -64,32 +64,51 @@ const LoginForm: React.FC<LoginFormProps> = ({
     setMode(newMode);
   };
 
+  // 通用校验：用户名
+  const validateUsername = (): string | null => {
+    if (!username.trim()) return '用户名不能为空';
+    if (username.trim().length < 2) return '用户名长度至少为2个字符';
+    if (username.trim().length > 32) return '用户名长度不能超过32个字符';
+    if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(username.trim())) {
+      return '用户名只能包含字母、数字、下划线和中文';
+    }
+    return null;
+  };
+
+  // 通用校验：密码
+  const validatePassword = (): string | null => {
+    if (!password) return '密码不能为空';
+    if (password.length < 6) return '密码长度至少为6个字符';
+    if (password.length > 64) return '密码长度不能超过64个字符';
+    return null;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
 
+    // 所有模式：校验用户名
+    const usernameErr = validateUsername();
+    if (usernameErr) { setLocalError(usernameErr); return; }
+
+    // 所有模式：校验密码
+    const passwordErr = validatePassword();
+    if (passwordErr) { setLocalError(passwordErr); return; }
+
     if (mode === 'login') {
-      onLogin(username, password, rememberMe);
+      onLogin(username.trim(), password, rememberMe);
     } else if (mode === 'register') {
       if (password !== confirmPassword) {
         setLocalError('两次输入的密码不一致');
         return;
       }
-      if (password.length < 6) {
-        setLocalError('密码长度至少为6个字符');
-        return;
-      }
-      onRegister(username, password);
+      onRegister(username.trim(), password);
     } else if (mode === 'resetPassword') {
       if (password !== confirmPassword) {
         setLocalError('两次输入的新密码不一致');
         return;
       }
-      if (password.length < 6) {
-        setLocalError('密码长度至少为6个字符');
-        return;
-      }
-      onResetPassword(username, password);
+      onResetPassword(username.trim(), password);
     }
   };
 

@@ -32,5 +32,18 @@ CREATE TABLE IF NOT EXISTS configs (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 创建用户表
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 默认管理员账号 (密码: password)
+INSERT OR IGNORE INTO users (username, password_hash, role) VALUES ('admin', '$2y$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'admin');
+
 -- 设置初始化标志
-INSERT INTO configs (key, value) VALUES ('DB_INITIALIZED', 'true');
+INSERT OR IGNORE INTO configs (key, value) VALUES ('DB_INITIALIZED', 'true');

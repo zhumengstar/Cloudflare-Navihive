@@ -106,6 +106,7 @@ const SiteCard = memo(function SiteCard({
       <Card
         sx={{
           height: '100%',
+          position: 'relative', // 确保绝对定位子元素参考此处
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 3,
@@ -237,141 +238,144 @@ const SiteCard = memo(function SiteCard({
             </Typography>
           </Box>
         ) : (
-          <CardActionArea onClick={handleCardClick} sx={{ height: '100%' }}>
-            <CardContent
-              sx={{
-                position: 'relative',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                p: { xs: 1.5, sm: 2 },
-                '&:last-child': { pb: { xs: 1.5, sm: 2 } },
-              }}
-            >
-              {/* 图标和名称 */}
-              <Box display='flex' alignItems='center' mb={1}>
-                {!iconError && site.icon ? (
-                  <Box position='relative' mr={1.5} width={32} height={32} flexShrink={0}>
-                    <Skeleton
-                      variant='rounded'
-                      width={32}
-                      height={32}
-                      sx={{
-                        display: !imageLoaded ? 'block' : 'none',
-                        position: 'absolute',
-                      }}
-                    />
-                    <Fade in={imageLoaded} timeout={500}>
-                      <Box
-                        component='img'
-                        src={site.icon}
-                        alt={site.name}
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 1,
-                          objectFit: 'cover',
-                        }}
-                        onError={handleIconError}
-                        onLoad={handleImageLoad}
-                      />
-                    </Fade>
-                  </Box>
-                ) : (
-                  <Box
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      mr: 1.5,
-                      borderRadius: 1,
-                      bgcolor: 'primary.light',
-                      color: 'primary.main',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: 1,
-                      borderColor: 'primary.main',
-                      opacity: 0.8,
-                    }}
-                  >
-                    {fallbackIcon}
-                  </Box>
-                )}
-                <Tooltip
-                  title={site.name}
-                  arrow
-                  placement="top"
-                  componentsProps={{
-                    tooltip: {
-                      sx: {
-                        fontSize: '1rem',
-                        lineHeight: 1.5,
-                        p: 1
-                      }
-                    }
-                  }}
-                >
-                  <Typography
-                    variant='subtitle2'
-                    fontWeight='medium'
-                    noWrap
-                    sx={{
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      transition: 'all 0.2s ease-in-out',
-                      '&:hover': {
-                        fontSize: { xs: '0.875rem', sm: '1rem' },
-                        fontWeight: 'bold',
-                        color: 'primary.main',
-                      }
-                    }}
-                  >
-                    {site.name}
-                  </Typography>
-                </Tooltip>
-              </Box>
-
-              {/* 描述 */}
-              <Typography
-                variant='body2'
-                color='text.secondary'
+          <>
+            <CardActionArea onClick={handleCardClick} sx={{ height: '100%' }}>
+              <CardContent
                 sx={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  flexGrow: 1,
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  position: 'relative',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  p: { xs: 1.5, sm: 2 },
+                  '&:last-child': { pb: { xs: 1.5, sm: 2 } },
                 }}
               >
-                {site.description || '暂无描述'}
-              </Typography>
+                {/* 图标和名称 */}
+                <Box display='flex' alignItems='center' mb={1}>
+                  {!iconError && site.icon ? (
+                    <Box position='relative' mr={1.5} width={32} height={32} flexShrink={0}>
+                      <Skeleton
+                        variant='rounded'
+                        width={32}
+                        height={32}
+                        sx={{
+                          display: !imageLoaded ? 'block' : 'none',
+                          position: 'absolute',
+                        }}
+                      />
+                      <Fade in={imageLoaded} timeout={500}>
+                        <Box
+                          component='img'
+                          src={site.icon}
+                          alt={site.name}
+                          sx={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 1,
+                            objectFit: 'cover',
+                          }}
+                          onError={handleIconError}
+                          onLoad={handleImageLoad}
+                        />
+                      </Fade>
+                    </Box>
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        mr: 1.5,
+                        borderRadius: 1,
+                        bgcolor: 'primary.light',
+                        color: 'primary.main',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 1,
+                        borderColor: 'primary.main',
+                        opacity: 0.8,
+                      }}
+                    >
+                      {fallbackIcon}
+                    </Box>
+                  )}
+                  <Tooltip
+                    title={site.name}
+                    arrow
+                    placement="top"
+                    componentsProps={{
+                      tooltip: {
+                        sx: {
+                          fontSize: '1rem',
+                          lineHeight: 1.5,
+                          p: 1
+                        }
+                      }
+                    }}
+                  >
+                    <Typography
+                      variant='subtitle2'
+                      fontWeight='medium'
+                      noWrap
+                      sx={{
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        transition: 'all 0.2s ease-in-out',
+                        '&:hover': {
+                          fontSize: { xs: '0.875rem', sm: '1rem' },
+                          fontWeight: 'bold',
+                          color: 'primary.main',
+                        }
+                      }}
+                    >
+                      {site.name}
+                    </Typography>
+                  </Tooltip>
+                </Box>
 
-              {/* 设置按钮 - 只在编辑模式显示 */}
-              {viewMode === 'edit' && (
-                <IconButton
-                  size='small'
+                {/* 描述 */}
+                <Typography
+                  variant='body2'
+                  color='text.secondary'
                   sx={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    bgcolor: 'action.hover',
-                    opacity: 0,
-                    transition: 'opacity 0.2s',
-                    '&:hover': {
-                      bgcolor: 'action.selected',
-                    },
-                    '.MuiCardActionArea-root:hover &': {
-                      opacity: 1,
-                    },
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    flexGrow: 1,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   }}
-                  onClick={handleSettingsClick}
-                  aria-label='网站设置'
                 >
-                  <SettingsIcon fontSize='small' />
-                </IconButton>
-              )}
-            </CardContent>
-          </CardActionArea>
+                  {site.description || '暂无描述'}
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+
+            {/* 设置按钮 - 只在编辑模式显示 (移出 CardActionArea 以修复 DOM 嵌套错误) */}
+            {viewMode === 'edit' && (
+              <IconButton
+                size='small'
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  zIndex: 1, // 确保在 CardActionArea 之上
+                  bgcolor: 'action.hover',
+                  opacity: 0,
+                  transition: 'opacity 0.2s',
+                  '&:hover': {
+                    bgcolor: 'action.selected',
+                  },
+                  '.MuiCard-root:hover &': {
+                    opacity: 1,
+                  },
+                }}
+                onClick={handleSettingsClick}
+                aria-label='网站设置'
+              >
+                <SettingsIcon fontSize='small' />
+              </IconButton>
+            )}
+          </>
         )}
       </Card>
     </Box>

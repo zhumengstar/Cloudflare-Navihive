@@ -38,6 +38,7 @@ export interface Group {
   name: string;
   order_num: number;
   is_public?: number; // 0 = 私密（仅管理员可见），1 = 公开（访客可见）
+  user_id?: number; // 新增归属用户ID
   created_at?: string;
   updated_at?: string;
 }
@@ -160,22 +161,28 @@ export class NavigationAPI {
       await this.db.exec('ALTER TABLE sites ADD COLUMN is_public INTEGER DEFAULT 1;');
     } catch { }
     try {
-      await this.db.exec('CREATE INDEX IF NOT EXISTS idx_groups_is_public ON groups(is_public);');
       await this.db.exec('CREATE INDEX IF NOT EXISTS idx_sites_is_public ON sites(is_public);');
+    } catch { }
+
+    // 迁移：groups 表添加 user_id 字段
+    try {
+      await this.db.exec('ALTER TABLE groups ADD COLUMN user_id INTEGER DEFAULT 1;'); // 默认为 admin(1)
+    } catch { }
+    try {
+      await this.db.exec('CREATE INDEX IF NOT EXISTS idx_groups_user_id ON groups(user_id);');
+    } catch { }
+
+    // 迁移：groups 表添加 user_id 字段
+    try {
+      await this.db.exec('ALTER TABLE groups ADD COLUMN user_id INTEGER DEFAULT 1;'); // 默认为 admin(1)
+    } catch { }
+    try {
+      await this.db.exec('CREATE INDEX IF NOT EXISTS idx_groups_user_id ON groups(user_id);');
     } catch { }
 
     // 创建 users 表（即使已初始化也尝试创建，以支持旧版本升级）
     try {
-      await this.db.exec(
-        `CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          username TEXT NOT NULL UNIQUE,
-          password_hash TEXT NOT NULL,
-          role TEXT DEFAULT 'user',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );`
-      );
+      await this.db.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT DEFAULT \'user\', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);');
     } catch { }
 
     // 迁移环境变量中的管理员到 users 表
@@ -195,14 +202,15 @@ export class NavigationAPI {
     } catch { }
 
     // 首先检查数据库是否已初始化
+    // 即使已初始化，我们也继续检查是否需要迁移或补充数据 (CREATE TABLE IF NOT EXISTS 是安全的)
     try {
+      /* 移除旧的提前返回逻辑，确保新功能（如数据初始化）能执行
       const isInitialized = await this.getConfig('DB_INITIALIZED');
       if (isInitialized === 'true') {
         return { success: true, alreadyInitialized: true };
       }
-    } catch {
-      // 如果发生错误，可能是配置表不存在，继续初始化
-    }
+      */
+    } catch { }
 
     // 先创建groups表
     await this.db.exec(
@@ -215,14 +223,62 @@ export class NavigationAPI {
     );
 
     // 创建全局配置表
-    await this.db.exec(`CREATE TABLE IF NOT EXISTS configs (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );`);
+    await this.db.exec('CREATE TABLE IF NOT EXISTS configs (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);');
 
-    // 设置初始化标志
+    // 数据库迁移：添加 user_id 到 groups 表
+    try {
+      await this.db.exec("ALTER TABLE groups ADD COLUMN user_id INTEGER DEFAULT 1");
+      console.log('Migrated: Added user_id to groups table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
+    // 初始化默认数据 (仅当从未初始化数据时)
+    try {
+      const isDataInitialized = await this.getConfig('DATA_INITIALIZED');
+      if (isDataInitialized !== 'true') {
+        console.log('Initializing default data...');
+
+        // 1. 插入默认分组 (User ID 1 = Admin)
+        const groupRes = await this.db.prepare(
+          `INSERT INTO groups (name, order_num, is_public, user_id) VALUES 
+           ('常用工具', 1, 1, 1),
+           ('开发社区', 2, 1, 1)
+           RETURNING id`
+        ).run();
+
+        // 由于 D1 批量插入返回 ID 可能有限制，简单起见我们假设 ID 是连续的 (或查询获取)
+        // 这里为了稳健，分别插入
+
+        // 重新查询刚才插入的分组 ID
+        const toolsGroup = await this.db.prepare("SELECT id FROM groups WHERE name = '常用工具' ORDER BY id DESC LIMIT 1").first<{ id: number }>();
+        const devGroup = await this.db.prepare("SELECT id FROM groups WHERE name = '开发社区' ORDER BY id DESC LIMIT 1").first<{ id: number }>();
+
+        if (toolsGroup && devGroup) {
+          // 2. 插入默认站点
+          await this.db.prepare(`
+             INSERT INTO sites (group_id, name, url, icon, description, order_num, is_public) VALUES 
+             (?, 'Google', 'https://www.google.com', 'https://www.google.com/favicon.ico', '全球最大的搜索引擎', 1, 1),
+             (?, 'GitHub', 'https://github.com', 'https://github.com/favicon.ico', '代码托管平台', 2, 1),
+             (?, 'ChatGPT', 'https://chat.openai.com', 'https://chat.openai.com/favicon.ico', 'AI 助手', 3, 1)
+           `).bind(toolsGroup.id, toolsGroup.id, toolsGroup.id).run();
+
+          await this.db.prepare(`
+             INSERT INTO sites (group_id, name, url, icon, description, order_num, is_public) VALUES 
+             (?, 'Stack Overflow', 'https://stackoverflow.com', 'https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64', '开发者问答社区', 1, 1),
+             (?, 'MDN Web Docs', 'https://developer.mozilla.org', 'https://www.google.com/s2/favicons?domain=developer.mozilla.org&sz=64', 'Web 开发文档', 2, 1),
+             (?, 'V2EX', 'https://www.v2ex.com', 'https://www.google.com/s2/favicons?domain=v2ex.com&sz=64', '创意工作者社区', 3, 1)
+           `).bind(devGroup.id, devGroup.id, devGroup.id).run();
+        }
+
+        await this.setConfig('DATA_INITIALIZED', 'true');
+        console.log('Default data initialized.');
+      }
+    } catch (e) {
+      console.error('Failed to initialize default data:', e);
+    }
+
+    // 设置 DB 初始化标志
     await this.setConfig('DB_INITIALIZED', 'true');
 
     return { success: true, alreadyInitialized: false };
@@ -250,7 +306,7 @@ export class NavigationAPI {
         const isPasswordValid = compareSync(loginRequest.password, user.password_hash);
         if (isPasswordValid) {
           const token = await this.generateToken(
-            { username: user.username, role: user.role },
+            { id: user.id, username: user.username, role: user.role },
             loginRequest.rememberMe || false
           );
           return { success: true, token, message: '登录成功' };
@@ -269,7 +325,7 @@ export class NavigationAPI {
     const isPasswordValid = compareSync(loginRequest.password, this.passwordHash);
     if (isPasswordValid) {
       const token = await this.generateToken(
-        { username: loginRequest.username },
+        { id: 1, username: loginRequest.username, role: 'admin' }, // 默认管理员 ID 为 1
         loginRequest.rememberMe || false
       );
       return { success: true, token, message: '登录成功' };
@@ -484,10 +540,19 @@ export class NavigationAPI {
   }
 
   // 分组相关 API
-  async getGroups(): Promise<Group[]> {
-    const result = await this.db
-      .prepare('SELECT id, name, order_num, created_at, updated_at FROM groups ORDER BY order_num')
-      .all<Group>();
+  // 获取所有分组
+  async getGroups(userId?: number): Promise<Group[]> {
+    let query = 'SELECT * FROM groups';
+    const params: any[] = [];
+
+    if (userId !== undefined) {
+      query += ' WHERE user_id = ?';
+      params.push(userId);
+    }
+
+    query += ' ORDER BY order_num ASC';
+
+    const result = await this.db.prepare(query).bind(...params).all<Group>();
     return result.results || [];
   }
 
@@ -499,12 +564,13 @@ export class NavigationAPI {
     return result;
   }
 
-  async createGroup(group: Group): Promise<Group> {
+  async createGroup(group: Group, userId?: number): Promise<Group> {
+    const finalUserId = userId || 1; // 默认为 admin
     const result = await this.db
       .prepare(
-        'INSERT INTO groups (name, order_num, is_public) VALUES (?, ?, ?) RETURNING id, name, order_num, is_public, created_at, updated_at'
+        'INSERT INTO groups (name, order_num, is_public, user_id) VALUES (?, ?, ?, ?) RETURNING id, name, order_num, is_public, user_id, created_at, updated_at'
       )
-      .bind(group.name, group.order_num, group.is_public ?? 1)
+      .bind(group.name, group.order_num, group.is_public ?? 1, finalUserId)
       .all<Group>();
     if (!result.results || result.results.length === 0) {
       throw new Error('创建分组失败');
@@ -586,9 +652,10 @@ export class NavigationAPI {
    * 获取所有分组及其站点 (使用 JOIN 优化,避免 N+1 查询)
    * 返回格式: GroupWithSites[] (每个分组包含其站点数组)
    */
-  async getGroupsWithSites(): Promise<GroupWithSites[]> {
+  // 获取所有分组及其站点 (使用 JOIN 优化,避免 N+1 查询)
+  async getGroupsWithSites(userId?: number): Promise<GroupWithSites[]> {
     // 使用 LEFT JOIN 一次性获取所有数据
-    const query = `
+    let query = `
       SELECT
         g.id as group_id,
         g.name as group_name,
@@ -608,10 +675,17 @@ export class NavigationAPI {
         s.updated_at as site_updated_at
       FROM groups g
       LEFT JOIN sites s ON g.id = s.group_id
-      ORDER BY g.order_num ASC, s.order_num ASC
     `;
 
-    const result = await this.db.prepare(query).all<{
+    const params: any[] = [];
+    if (userId !== undefined) {
+      query += ' WHERE g.user_id = ?';
+      params.push(userId);
+    }
+
+    query += ' ORDER BY g.order_num ASC, s.order_num ASC';
+
+    const result = await this.db.prepare(query).bind(...params).all<{
       group_id: number;
       group_name: string;
       group_order: number;
@@ -667,6 +741,71 @@ export class NavigationAPI {
     }
 
     return Array.from(groupsMap.values());
+  }
+
+  // 随机获取站点（访客模式）
+  async getRandomSites(limit: number = 20): Promise<{
+    site: Site;
+    groupName: string;
+    ownerName: string;
+  }[]> {
+    // 确保 groups 和 sites 都是公开的
+    const query = `
+      SELECT 
+        s.id as site_id,
+        s.group_id,
+        s.name as site_name,
+        s.url as site_url,
+        s.icon as site_icon,
+        s.description as site_description,
+        s.notes as site_notes,
+        s.order_num as site_order,
+        s.is_public as site_is_public,
+        s.created_at as site_created_at,
+        s.updated_at as site_updated_at,
+        g.name as group_name,
+        u.username as owner_name
+      FROM sites s
+      JOIN groups g ON s.group_id = g.id
+      JOIN users u ON g.user_id = u.id
+      WHERE s.is_public = 1 AND g.is_public = 1
+      ORDER BY RANDOM()
+      LIMIT ?
+    `;
+
+    const result = await this.db.prepare(query).bind(limit).all<{
+      site_id: number;
+      group_id: number;
+      site_name: string;
+      site_url: string;
+      site_icon: string;
+      site_description: string;
+      site_notes: string;
+      site_order: number;
+      site_is_public: number;
+      site_created_at: string;
+      site_updated_at: string;
+      group_name: string;
+      owner_name: string;
+    }>();
+
+    return (result.results || []).map(row => ({
+      site: {
+        id: row.site_id,
+        group_id: row.group_id,
+        name: row.site_name,
+        url: row.site_url,
+        icon: row.site_icon,
+        description: row.site_description,
+        notes: row.site_notes,
+        order_num: row.site_order,
+        is_public: row.site_is_public,
+        created_at: row.site_created_at,
+        updated_at: row.site_updated_at
+      },
+      groupName: row.group_name,
+      ownerName: row.owner_name
+    }));
   }
 
   async getSite(id: number): Promise<Site | null> {

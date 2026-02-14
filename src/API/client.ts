@@ -1,4 +1,5 @@
 import { Group, Site, LoginResponse, RegisterResponse, ResetPasswordResponse, ExportData, ImportResult, GroupWithSites } from './http';
+export type { Site };
 
 export class NavigationClient {
   private baseUrl: string;
@@ -141,6 +142,28 @@ export class NavigationClient {
     }
 
     return response.json();
+  }
+
+  // 获取随机推荐站点
+  async getRandomSites(limit: number = 20): Promise<{
+    site: Site;
+    groupName: string;
+    ownerName: string;
+  }[]> {
+    const response = await fetch(`${this.baseUrl}/sites/random?limit=${limit}`);
+    if (!response.ok) {
+      throw new Error('获取推荐内容失败');
+    }
+    return response.json();
+  }
+
+  // 初始化数据库
+  async initDB(): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/init`, { method: 'GET' });
+    } catch (error) {
+      console.error('初始化数据库失败:', error);
+    }
   }
 
   // 检查身份验证状态

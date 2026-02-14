@@ -45,11 +45,17 @@ interface SearchBoxProps {
   groups: Group[];
   sites: Site[];
   onInternalResultClick?: (result: SearchResultItem) => void;
+  onDelete?: (id: number) => void;
 }
 
 type SearchMode = 'internal' | 'external';
 
-const SearchBox: React.FC<SearchBoxProps> = ({ groups, sites, onInternalResultClick }) => {
+const SearchBox: React.FC<SearchBoxProps> = ({
+  groups,
+  sites,
+  onInternalResultClick,
+  onDelete,
+}) => {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('internal');
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -369,6 +375,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ groups, sites, onInternalResultCl
           results={results}
           query={query}
           onResultClick={handleResultClick}
+          onDelete={onDelete}
           open={showResults}
         />
       )}
