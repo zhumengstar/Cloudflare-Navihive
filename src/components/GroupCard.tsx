@@ -151,11 +151,9 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   // 执行批量删除
   const handleBatchDeleteClick = () => {
     if (selectedSiteIds.size === 0) return;
-    if (window.confirm(`确定要将选中的 ${selectedSiteIds.size} 个书签移入回收站吗？`)) {
-      if (onBatchDelete) {
-        onBatchDelete(Array.from(selectedSiteIds));
-        handleExitBatchMode();
-      }
+    if (onBatchDelete) {
+      onBatchDelete(Array.from(selectedSiteIds));
+      handleExitBatchMode();
     }
   };
 

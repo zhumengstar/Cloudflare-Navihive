@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo } from 'react';
 import { NavigationClient } from './API/client';
 import { MockNavigationClient } from './API/mock';
 import { Site, Group } from './API/http';
@@ -6,11 +6,14 @@ import { GroupWithSites } from './types';
 import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
 import SiteCard from './components/SiteCard';
-import LoginForm from './components/LoginForm';
-import VisitorHome from './components/VisitorHome';
-import UserAvatar from './components/UserAvatar';
+
+// 懒加载大型组件
+const LoginForm = lazy(() => import('./components/LoginForm'));
+const VisitorHome = lazy(() => import('./components/VisitorHome'));
+const UserAvatar = lazy(() => import('./components/UserAvatar'));
 import SearchBox from './components/SearchBox';
-import AIChatPanel from './components/AIChatPanel';
+const AIChatPanel = lazy(() => import('./components/AIChatPanel'));
+
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
 import { SearchResultItem } from './utils/search';
 import './App.css';
@@ -1350,20 +1353,22 @@ function App() {
           bgcolor: 'background.default',
         }}
       >
-        <LoginForm
-          onLogin={handleLogin}
-          onRegister={handleRegister}
-          onResetPassword={handleResetPassword}
-          onSendCode={handleSendCode}
-          loading={loginLoading}
-          error={loginError}
-          registerLoading={registerLoading}
-          registerError={registerError}
-          registerSuccess={registerSuccess}
-          resetPasswordLoading={resetPasswordLoading}
-          resetPasswordError={resetPasswordError}
-          resetPasswordSuccess={resetPasswordSuccess}
-        />
+        <Suspense fallback={<CircularProgress size={40} sx={{ mx: 'auto', display: 'block' }} />}>
+          <LoginForm
+            onLogin={handleLogin}
+            onRegister={handleRegister}
+            onResetPassword={handleResetPassword}
+            onSendCode={handleSendCode}
+            loading={loginLoading}
+            error={loginError}
+            registerLoading={registerLoading}
+            registerError={registerError}
+            registerSuccess={registerSuccess}
+            resetPasswordLoading={resetPasswordLoading}
+            resetPasswordError={resetPasswordError}
+            resetPasswordSuccess={resetPasswordSuccess}
+          />
+        </Suspense>
         {/* 如果不是强制认证（比如访客模式点击登录），显示返回按钮 */}
         {!isAuthenticated && (
           <Button
@@ -1651,18 +1656,20 @@ function App() {
               )}
               <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} />
               {isAuthenticated && (
-                <UserAvatar
-                  username={username}
-                  onLogout={handleLogout}
-                  onSiteRestored={handleSiteRestored}
-                  onStartGroupSort={startGroupSort}
-                  onStartCrossGroupDrag={startCrossGroupDrag}
-                  onOpenConfig={handleOpenConfig}
-                  onExportData={handleExportData}
-                  onOpenImport={handleOpenImport}
-                  onOpenAddGroup={handleOpenAddGroup}
-                  api={api}
-                />
+                <Suspense fallback={null}>
+                  <UserAvatar
+                    username={username}
+                    onLogout={handleLogout}
+                    onSiteRestored={handleSiteRestored}
+                    onStartGroupSort={startGroupSort}
+                    onStartCrossGroupDrag={startCrossGroupDrag}
+                    onOpenConfig={handleOpenConfig}
+                    onExportData={handleExportData}
+                    onOpenImport={handleOpenImport}
+                    onOpenAddGroup={handleOpenAddGroup}
+                    api={api}
+                  />
+                </Suspense>
               )}
               {/* GitHub 图标 */}
               <IconButton
@@ -1688,13 +1695,15 @@ function App() {
           </Box>
 
           {!isAuthenticated ? (
-            <VisitorHome
-              api={api}
-              onLoginClick={() => {
-                console.log('VisitorHome onLoginClick triggered');
-                setIsLoginOpen(true);
-              }}
-            />
+            <Suspense fallback={<PageSkeleton />}>
+              <VisitorHome
+                api={api}
+                onLoginClick={() => {
+                  console.log('VisitorHome onLoginClick triggered');
+                  setIsLoginOpen(true);
+                }}
+              />
+            </Suspense>
           ) : (
             <>
               {/* 搜索框 - 根据配置条件渲染 */}
@@ -2355,7 +2364,11 @@ function App() {
         </ScrollTop>
       </Box>
       {/* AI 智能问答悬浮窗 */}
-      {isAuthenticated && <AIChatPanel api={api} username={username} />}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <AIChatPanel api={api} username={username} />
+        </Suspense>
+      )}
     </ThemeProvider>
   );
 }

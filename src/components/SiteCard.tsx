@@ -1,7 +1,7 @@
 // src/components/SiteCard.tsx
-import { useState, memo } from 'react';
+import { useState, memo, lazy, Suspense } from 'react';
 import { Site } from '../API/http';
-import SiteSettingsModal from './SiteSettingsModal';
+const SiteSettingsModal = lazy(() => import('./SiteSettingsModal'));
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 // 引入Material UI组件
@@ -442,13 +442,15 @@ const SiteCard = memo(function SiteCard({
         </div>
 
         {showSettings && (
-          <SiteSettingsModal
-            site={site}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onClose={handleCloseSettings}
-            iconApi={iconApi} // 传递iconApi给SiteSettingsModal
-          />
+          <Suspense fallback={null}>
+            <SiteSettingsModal
+              site={site}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onClose={handleCloseSettings}
+              iconApi={iconApi} // 传递iconApi给SiteSettingsModal
+            />
+          </Suspense>
         )}
       </>
     );
@@ -459,13 +461,15 @@ const SiteCard = memo(function SiteCard({
       {cardContent}
 
       {showSettings && (
-        <SiteSettingsModal
-          site={site}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          onClose={handleCloseSettings}
-          iconApi={iconApi} // 传递iconApi给SiteSettingsModal
-        />
+        <Suspense fallback={null}>
+          <SiteSettingsModal
+            site={site}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            onClose={handleCloseSettings}
+            iconApi={iconApi} // 传递iconApi给SiteSettingsModal
+          />
+        </Suspense>
       )}
     </>
   );

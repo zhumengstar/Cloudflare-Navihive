@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import {
     Avatar,
     Box,
@@ -36,7 +36,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import RecycleBin from './RecycleBin';
+const RecycleBin = React.lazy(() => import('./RecycleBin'));
 import { Site } from '../API/http';
 
 interface UserAvatarProps {
@@ -571,12 +571,14 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 </DialogActions>
             </Dialog>
 
-            <RecycleBin
-                open={recycleBinOpen}
-                onClose={handleRecycleBinClose}
-                onRestore={handleRestoreSite}
-                api={api}
-            />
+            <Suspense fallback={null}>
+                <RecycleBin
+                    open={recycleBinOpen}
+                    onClose={handleRecycleBinClose}
+                    onRestore={handleRestoreSite}
+                    api={api}
+                />
+            </Suspense>
         </>
     );
 };
