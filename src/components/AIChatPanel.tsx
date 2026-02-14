@@ -308,11 +308,13 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                         boxShadow: msg.role === 'user'
                                             ? 'none'
                                             : `0 1px 3px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)'}`,
+                                        overflowWrap: 'break-word',
+                                        wordBreak: 'break-word',
                                     }}
                                 >
                                     <Box
                                         sx={{
-                                            '& p': { m: 0, lineHeight: 1.6, fontSize: '0.85rem' },
+                                            '& p': { m: 0, lineHeight: 1.6, fontSize: '0.85rem', overflowWrap: 'break-word', wordBreak: 'break-word' },
                                             '& p + p': { mt: 1 },
                                             '& ul, & ol': { m: 0, pl: 2.5, mt: 0.5 },
                                             '& li': { mb: 0.5 },
@@ -366,7 +368,21 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                             },
                                         }}
                                     >
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm]}
+                                            components={{
+                                                a: ({ node, ...props }) => (
+                                                    <a
+                                                        {...props}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
+                                                )
+                                            }}
+                                        >
+                                            {msg.content}
+                                        </ReactMarkdown>
                                     </Box>
                                 </Box>
                             </Box>
