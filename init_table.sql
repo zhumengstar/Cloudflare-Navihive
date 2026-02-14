@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sites (
     notes TEXT,
     order_num INTEGER NOT NULL,
     is_public INTEGER DEFAULT 1,
+    last_clicked_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE

@@ -989,6 +989,18 @@ export default {
 
                     const result = await api.updateSite(id, data);
                     return createJsonResponse(result, request);
+                } else if (path.startsWith("sites/") && path.endsWith("/click") && method === "POST") {
+                    const idStr = path.split("/")[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const id = parseInt(idStr);
+                    if (isNaN(id)) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+
+                    const result = await api.clickSite(id);
+                    return createJsonResponse({ success: result }, request);
                 } else if (path.startsWith("sites/") && method === "DELETE") {
                     const idStr = path.split("/")[1];
                     if (!idStr) {

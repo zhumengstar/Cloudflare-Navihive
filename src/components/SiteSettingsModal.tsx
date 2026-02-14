@@ -1,5 +1,5 @@
 // src/components/SiteSettingsModal.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Site, Group } from '../API/http';
 import { extractDomain, isSecureUrl } from '../utils/url';
 // Material UI 导入
@@ -65,6 +65,20 @@ export default function SiteSettingsModal({
 
   // 用于预览图标
   const [iconPreview, setIconPreview] = useState<string | null>(site.icon || null);
+
+  // 当外部 site 属性更新时（例如异步加载完成后），同步内部表单状态
+  useEffect(() => {
+    setFormData({
+      name: site.name,
+      url: site.url,
+      icon: site.icon || '',
+      description: site.description || '',
+      notes: site.notes || '',
+      group_id: String(site.group_id),
+      is_public: site.is_public ?? 1,
+    });
+    setIconPreview(site.icon || null);
+  }, [site]);
 
   // 验证错误
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -362,33 +376,47 @@ export default function SiteSettingsModal({
               size='small'
             />
 
-            {/* 公开/私密开关 */}
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={formData.is_public !== 0}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      is_public: e.target.checked ? 1 : 0,
-                    }))
-                  }
-                  color='primary'
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant='body1'>
-                    {formData.is_public !== 0 ? '公开站点' : '私密站点'}
+            {/* 公开/私密开关与上次访问时间并排显示 */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.is_public !== 0}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        is_public: e.target.checked ? 1 : 0,
+                      }))
+                    }
+                    color='primary'
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant='body1'>
+                      {formData.is_public !== 0 ? '公开站点' : '私密站点'}
+                    </Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      {formData.is_public !== 0
+                        ? '所有访客都可以看到此站点'
+                        : '只有管理员登录后才能看到此站点'}
+                    </Typography>
+                  </Box>
+                }
+              />
+
+              {/* 上次访问时间展示 */}
+              {site.last_clicked_at && (
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant='caption' display='block' color='text.secondary'>
+                    上次点击时间
                   </Typography>
-                  <Typography variant='caption' color='text.secondary'>
-                    {formData.is_public !== 0
-                      ? '所有访客都可以看到此站点'
-                      : '只有管理员登录后才能看到此站点'}
+                  <Typography variant='body2' fontWeight='medium'>
+                    {new Date(site.last_clicked_at).toLocaleString()}
                   </Typography>
                 </Box>
-              }
-            />
+              )}
+            </Box>
           </Stack>
         </DialogContent>
 

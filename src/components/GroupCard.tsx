@@ -94,6 +94,8 @@ interface GroupCardProps {
 
   draggedSiteId?: string | null; // 当前拖拽的站点ID
   onBatchDelete?: (siteIds: number[]) => void; // 新增：批量删除回调
+  onSiteClick?: (siteId: number) => void; // 新增：站点点击回调
+  onSettingsOpen?: (siteId: number) => Promise<void> | void; // 新增：打开设置回调
 }
 
 const GroupCard: React.FC<GroupCardProps> = React.memo(({
@@ -106,6 +108,8 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   onAddSite,
   onUpdateGroup,
   onDeleteGroup,
+  onSiteClick,
+  onSettingsOpen,
   configs,
   draggedSiteId,
   onBatchDelete,
@@ -252,6 +256,8 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
                       site={site}
                       onUpdate={onUpdate}
                       onDelete={onDelete}
+                      onSiteClick={onSiteClick}
+                      onSettingsOpen={onSettingsOpen}
                       isEditMode={true}
                       viewMode={viewMode}
                       index={idx}
@@ -297,6 +303,8 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
               site={site}
               onUpdate={onUpdate}
               onDelete={onDelete}
+              onSiteClick={onSiteClick}
+              onSettingsOpen={onSettingsOpen}
               isEditMode={false}
               viewMode={viewMode}
               iconApi={configs?.['site.iconApi']}

@@ -24,6 +24,7 @@ interface SiteCardProps {
   site: Site;
   onUpdate: (updatedSite: Site) => void;
   onDelete: (siteId: number) => void;
+  onSiteClick?: (siteId: number) => void; // 新增：点击回调
   isEditMode?: boolean;
   viewMode?: 'readonly' | 'edit'; // 访问模式
   index?: number;
@@ -31,6 +32,7 @@ interface SiteCardProps {
   isBatchMode?: boolean; // 新增：是否处于批量模式
   isSelected?: boolean; // 新增：是否被选中
   onToggleSelection?: (id: number) => void; // 新增：切换选中回调
+  onSettingsOpen?: (siteId: number) => Promise<void> | void; // 新增：打开设置时的回调
 }
 
 // 使用memo包装组件以减少不必要的重渲染
@@ -38,6 +40,7 @@ const SiteCard = memo(function SiteCard({
   site,
   onUpdate,
   onDelete,
+  onSiteClick,
   isEditMode = false,
   viewMode = 'edit', // 默认为编辑模式
   index = 0,
@@ -45,6 +48,7 @@ const SiteCard = memo(function SiteCard({
   isBatchMode = false,
   isSelected = false,
   onToggleSelection,
+  onSettingsOpen,
 }: SiteCardProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [iconError, setIconError] = useState(!site.icon);
@@ -68,9 +72,12 @@ const SiteCard = memo(function SiteCard({
   const fallbackIcon = site.name.charAt(0).toUpperCase();
 
   // 处理设置按钮点击
-  const handleSettingsClick = (e: React.MouseEvent) => {
+  const handleSettingsClick = async (e: React.MouseEvent) => {
     e.stopPropagation(); // 阻止卡片点击事件
     e.preventDefault(); // 防止默认行为
+    if (onSettingsOpen && site.id) {
+      onSettingsOpen(site.id);
+    }
     setShowSettings(true);
   };
 
@@ -86,6 +93,10 @@ const SiteCard = memo(function SiteCard({
       return;
     }
     if (!isEditMode && site.url) {
+      // 记录点击行为，不阻塞跳转
+      if (site.id && onSiteClick) {
+        onSiteClick(site.id);
+      }
       window.open(site.url, '_blank');
     }
   };

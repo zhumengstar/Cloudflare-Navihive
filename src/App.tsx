@@ -1432,6 +1432,30 @@ function App() {
     }
   };
 
+  // 记录站点点击
+  const handleSiteClick = async (siteId: number) => {
+    try {
+      await api.clickSite(siteId);
+    } catch (error) {
+      console.warn('记录点击失败:', error);
+    }
+  };
+
+  // 打开站点设置时刷新数据
+  const handleSiteSettingsOpen = async (siteId: number) => {
+    try {
+      const updatedSite = await api.getSite(siteId);
+      if (updatedSite) {
+        setGroups(prev => prev.map(group => ({
+          ...group,
+          sites: group.sites.map(site => site.id === siteId ? updatedSite : site)
+        })));
+      }
+    } catch (error) {
+      console.warn('刷新站点数据失败:', error);
+    }
+  };
+
   // 批量删除站点
   const handleBatchDeleteSites = async (siteIds: number[]) => {
     if (siteIds.length === 0) return;
@@ -1755,6 +1779,8 @@ function App() {
                               onUpdateGroup={handleGroupUpdate}
                               onDeleteGroup={handleGroupDelete}
                               onBatchDelete={handleBatchDeleteSites}
+                              onSiteClick={handleSiteClick}
+                              onSettingsOpen={handleSiteSettingsOpen}
                               configs={configs}
                               draggedSiteId={draggedSiteId}
                             />
@@ -1788,6 +1814,7 @@ function App() {
                               site={activeSite}
                               onUpdate={() => { }}
                               onDelete={() => { }}
+                              onSiteClick={() => { }}
                               isEditMode={true}
                               viewMode={viewMode}
                               iconApi={configs['site.iconApi']}

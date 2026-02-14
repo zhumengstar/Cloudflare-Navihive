@@ -57,6 +57,7 @@ export interface Site {
   notes: string;
   order_num: number;
   is_public?: number; // 0 = 私密（仅管理员可见），1 = 公开（访客可见）
+  last_clicked_at?: string; // 上次点击时间
   created_at?: string;
   updated_at?: string;
   is_deleted?: number;
@@ -794,7 +795,7 @@ export class NavigationAPI {
   // 网站相关 API
   async getSites(groupId?: number): Promise<Site[]> {
     let query =
-      'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites WHERE (is_deleted = 0 OR is_deleted IS NULL)';
+      'SELECT id, group_id, name, url, icon, description, notes, order_num, last_clicked_at, created_at, updated_at FROM sites WHERE (is_deleted = 0 OR is_deleted IS NULL)';
     const params: (string | number)[] = [];
 
     if (groupId !== undefined) {
@@ -834,6 +835,7 @@ export class NavigationAPI {
         s.notes as site_notes,
         s.order_num as site_order,
         s.is_public as site_is_public,
+        s.last_clicked_at as site_last_clicked_at,
         s.created_at as site_created_at,
         s.updated_at as site_updated_at
       FROM groups g
@@ -863,6 +865,7 @@ export class NavigationAPI {
       site_notes: string | null;
       site_order: number | null;
       site_is_public?: number;
+      site_last_clicked_at: string | null;
       site_created_at: string | null;
       site_updated_at: string | null;
     }>();
@@ -897,6 +900,7 @@ export class NavigationAPI {
           notes: row.site_notes || '',
           order_num: row.site_order!,
           is_public: row.site_is_public,
+          last_clicked_at: row.site_last_clicked_at || undefined,
           created_at: row.site_created_at!,
           updated_at: row.site_updated_at!,
         });
@@ -924,6 +928,7 @@ export class NavigationAPI {
         s.notes as site_notes,
         s.order_num as site_order,
         s.is_public as site_is_public,
+        s.last_clicked_at as site_last_clicked_at,
         s.created_at as site_created_at,
         s.updated_at as site_updated_at,
         g.name as group_name,
@@ -946,6 +951,7 @@ export class NavigationAPI {
       site_notes: string;
       site_order: number;
       site_is_public: number;
+      site_last_clicked_at: string | null;
       site_created_at: string;
       site_updated_at: string;
       group_name: string;
@@ -963,6 +969,7 @@ export class NavigationAPI {
         notes: row.site_notes,
         order_num: row.site_order,
         is_public: row.site_is_public,
+        last_clicked_at: row.site_last_clicked_at || undefined,
         created_at: row.site_created_at,
         updated_at: row.site_updated_at
       },
@@ -974,7 +981,7 @@ export class NavigationAPI {
   async getSite(id: number): Promise<Site | null> {
     const result = await this.db
       .prepare(
-        'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites WHERE id = ?'
+        'SELECT id, group_id, name, url, icon, description, notes, order_num, last_clicked_at, created_at, updated_at FROM sites WHERE id = ?'
       )
       .bind(id)
       .first<Site>();
@@ -987,7 +994,7 @@ export class NavigationAPI {
         `
       INSERT INTO sites (group_id, name, url, icon, description, notes, order_num, is_public)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      RETURNING id, group_id, name, url, icon, description, notes, order_num, is_public, created_at, updated_at
+      RETURNING id, group_id, name, url, icon, description, notes, order_num, is_public, last_clicked_at, created_at, updated_at
     `
       )
       .bind(
@@ -1074,6 +1081,19 @@ export class NavigationAPI {
       .bind(id)
       .run();
     return result.success;
+  }
+
+  async clickSite(id: number): Promise<boolean> {
+    try {
+      const result = await this.db
+        .prepare('UPDATE sites SET last_clicked_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .bind(id)
+        .run();
+      return result.success;
+    } catch (error) {
+      console.error('记录点击时间失败:', error);
+      return false;
+    }
   }
 
   // Restore site

@@ -404,6 +404,20 @@ export class MockNavigationClient {
     return true;
   }
 
+  async clickSite(id: number): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const index = mockSites.findIndex((s) => s.id === id);
+    if (index !== -1) {
+      const site = mockSites[index];
+      if (site) {
+        site.last_clicked_at = new Date().toISOString();
+        saveSitesToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
   async deleteSites(ids: number[]): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     for (const id of ids) {

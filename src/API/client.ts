@@ -150,12 +150,8 @@ export class NavigationClient {
       throw new Error(`API错误: ${response.status}`);
     }
 
-    // 请求成功，标记为已认证（如果之前未认证）
-    if (response.ok && !this.isAuthenticated) {
-      this.isAuthenticated = true;
-    }
-
-    return response.json();
+    const data = await response.json();
+    return data;
   }
 
   // 获取随机推荐站点
@@ -276,6 +272,13 @@ export class NavigationClient {
   async deleteSite(id: number): Promise<boolean> {
     const response = await this.request(`sites/${id}`, {
       method: 'DELETE',
+    });
+    return response.success;
+  }
+
+  async clickSite(id: number): Promise<boolean> {
+    const response = await this.request(`sites/${id}/click`, {
+      method: 'POST',
     });
     return response.success;
   }
