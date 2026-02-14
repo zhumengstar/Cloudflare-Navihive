@@ -673,9 +673,10 @@ function App() {
 
       // 按分组 ID 对要恢复的站点进行归类
       const sitesByGroup = sitesToRestore.reduce((acc, site) => {
-        if (site.group_id) {
-          if (!acc[site.group_id]) acc[site.group_id] = [];
-          acc[site.group_id].push(site);
+        if (site.group_id !== undefined && site.group_id !== null) {
+          const gid = site.group_id;
+          if (!acc[gid]) acc[gid] = [];
+          acc[gid]!.push(site);
         }
         return acc;
       }, {} as Record<number, Site[]>);

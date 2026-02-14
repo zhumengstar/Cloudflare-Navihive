@@ -3,6 +3,7 @@ import {
     type LoginRequest,
     type RegisterRequest,
     type ResetPasswordRequest,
+    type SendCodeRequest,
     type ExportData,
     type Group,
     type Site,
@@ -1343,12 +1344,15 @@ ${bookmarkContext ? `以下是用户保存的书签数据：\n${bookmarkContext}
 // 环境变量接口
 interface Env {
     DB: D1Database;
+    KV: KVNamespace;
     AI: Ai;
     AUTH_ENABLED?: string;
     AUTH_REQUIRED_FOR_READ?: string;
     AUTH_USERNAME?: string;
     AUTH_PASSWORD?: string;
     AUTH_SECRET?: string;
+    EMAIL_API_KEY?: string;
+    EMAIL_FROM?: string;
 }
 
 // 验证用接口
@@ -1430,26 +1434,7 @@ function validateRegister(data: RegisterInput): { valid: boolean; errors?: strin
     return { valid: errors.length === 0, errors };
 }
 
-interface ResetPasswordInput {
-    username?: string;
-    newPassword?: string;
-}
 
-function validateResetPassword(data: ResetPasswordInput): { valid: boolean; errors?: string[] } {
-    const errors: string[] = [];
-
-    if (!data.username || typeof data.username !== "string") {
-        errors.push("用户名不能为空且必须是字符串");
-    }
-
-    if (!data.newPassword || typeof data.newPassword !== "string") {
-        errors.push("新密码不能为空且必须是字符串");
-    } else if (data.newPassword.length < 6 || data.newPassword.length > 64) {
-        errors.push("密码长度必须在6-64个字符之间");
-    }
-
-    return { valid: errors.length === 0, errors };
-}
 
 function validateGroup(data: GroupInput): {
     valid: boolean;
@@ -1613,6 +1598,16 @@ interface ExportedHandler {
 interface ExecutionContext {
     waitUntil(promise: Promise<any>): void;
     passThroughOnException(): void;
+}
+
+interface KVNamespace {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+    delete(key: string): Promise<void>;
+}
+
+interface Ai {
+    run(model: string, input: any): Promise<any>;
 }
 
 // 声明D1数据库类型

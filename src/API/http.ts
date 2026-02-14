@@ -27,6 +27,7 @@ interface D1Result<T = unknown> {
 interface Env {
   DB: D1Database;
   KV: any; // KV 命名空间
+  AI: any; // AI 绑定
   AUTH_ENABLED?: string; // 是否启用身份验证
   AUTH_USERNAME?: string; // 认证用户名
   AUTH_PASSWORD?: string; // 认证密码哈希 (bcrypt)
