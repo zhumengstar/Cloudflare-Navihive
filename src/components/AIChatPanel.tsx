@@ -166,14 +166,13 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
             <Zoom in={!open}>
                 <Fab
                     color="primary"
+                    size="large"
                     onClick={() => setOpen(true)}
                     sx={{
                         position: 'fixed',
                         bottom: 24,
-                        right: 24,
+                        right: 16,
                         zIndex: 1200,
-                        width: 56,
-                        height: 56,
                         boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
                         background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                         '&:hover': {
@@ -183,7 +182,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                         transition: 'all 0.2s ease',
                     }}
                 >
-                    <SmartToyIcon sx={{ fontSize: 28 }} />
+                    <SmartToyIcon fontSize="large" />
                 </Fab>
             </Zoom>
 
@@ -194,7 +193,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                     sx={{
                         position: 'fixed',
                         bottom: 24,
-                        right: 24,
+                        right: 16,
                         width: { xs: 'calc(100vw - 32px)', sm: 380 },
                         height: { xs: 'calc(100vh - 100px)', sm: 520 },
                         zIndex: 1300,

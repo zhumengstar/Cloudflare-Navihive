@@ -137,7 +137,7 @@ function ScrollTop(props: { children: React.ReactElement; window?: () => Window 
       <Box
         onClick={handleClick}
         role="presentation"
-        sx={{ position: 'fixed', bottom: 80, right: 16, zIndex: 100 }}
+        sx={{ position: 'fixed', bottom: 96, right: 16, zIndex: 100 }}
       >
         {children}
       </Box>
@@ -701,6 +701,43 @@ function App() {
   const cancelSort = () => {
     setSortMode(SortMode.None);
     setCurrentSortingGroupId(null);
+  };
+
+  // 处理站点恢复
+  const handleSiteRestored = (site: Site) => {
+    setGroups((prevGroups) => {
+      // 找到归属分组
+      const groupIndex = prevGroups.findIndex((g) => g.id === site.group_id);
+      if (groupIndex === -1) {
+        // 如果找不到分组，可能是分组也被删除了或者数据不同步，此时回退到刷新整个列表
+        fetchData();
+        return prevGroups;
+      }
+
+      // 创建新分组列表副本
+      const newGroups = [...prevGroups];
+      const targetGroup = { ...newGroups[groupIndex] };
+
+      // 确保 sites 数组存在
+      const sites = targetGroup.sites ? [...targetGroup.sites] : [];
+
+      // 检查是否已存在（避免重复添加）
+      if (!sites.find(s => s.id === site.id)) {
+        sites.push(site);
+        // 按 order_num 排序
+        sites.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+
+        targetGroup.sites = sites;
+        newGroups[groupIndex] = targetGroup as GroupWithSites;
+
+        setSnackbarMessage(`已恢复站点: ${site.name}`);
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+
+        return newGroups;
+      }
+      return prevGroups;
+    });
   };
 
   // 启动跨分组拖动模式
@@ -1559,7 +1596,8 @@ function App() {
                 <UserAvatar
                   username={username}
                   onLogout={handleLogout}
-                  onSiteRestored={fetchData}
+                  onSiteRestored={handleSiteRestored}
+                  api={api}
                 />
               )}
               {/* GitHub 图标 */}

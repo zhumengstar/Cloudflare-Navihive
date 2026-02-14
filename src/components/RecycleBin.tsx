@@ -18,15 +18,17 @@ import {
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import RestoreFromTrashIcon from '@mui/icons-material/RestoreFromTrash';
 import { Site } from '../API/http';
-import { APIClient, navigationClient } from '../API/client';
+import { NavigationClient } from '../API/client';
+import { MockNavigationClient } from '../API/mock';
 
 interface RecycleBinProps {
     open: boolean;
     onClose: () => void;
-    onRestore: () => void; // Callback to refresh main list
+    onRestore: (site: Site) => void; // Callback to refresh main list
+    api: NavigationClient | MockNavigationClient;
 }
 
-const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore }) => {
+const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }) => {
     const [deletedSites, setDeletedSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -34,7 +36,7 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore }) => 
     const fetchDeletedSites = async () => {
         setLoading(true);
         try {
-            const sites = await navigationClient.getTrashSites();
+            const sites = await api.getTrashSites();
             setDeletedSites(sites);
         } catch (error) {
             console.error("Failed to fetch trash sites:", error);
@@ -53,10 +55,10 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore }) => 
         if (!site.id) return;
         setActionLoading(site.id);
         try {
-            const success = await navigationClient.restoreSite(site.id);
-            if (success) {
+            const restoredSite = await api.restoreSite(site.id);
+            if (restoredSite) {
                 setDeletedSites(prev => prev.filter(s => s.id !== site.id));
-                onRestore(); // Trigger refresh of main list
+                onRestore(restoredSite); // Trigger refresh of main list
             }
         } catch (error) {
             console.error("Failed to restore site:", error);
@@ -71,7 +73,7 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore }) => 
 
         setActionLoading(site.id);
         try {
-            const success = await navigationClient.deleteSitePermanently(site.id);
+            const success = await api.deleteSitePermanently(site.id);
             if (success) {
                 setDeletedSites(prev => prev.filter(s => s.id !== site.id));
             }

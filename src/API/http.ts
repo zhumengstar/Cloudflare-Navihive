@@ -166,12 +166,15 @@ export class NavigationAPI {
       await this.db.exec('CREATE INDEX IF NOT EXISTS idx_sites_is_public ON sites(is_public);');
     } catch { }
 
-    // 迁移：groups 表添加 user_id 字段
+    // 迁移：sites 表添加 is_deleted 和 deleted_at 字段
     try {
-      await this.db.exec('ALTER TABLE groups ADD COLUMN user_id INTEGER DEFAULT 1;'); // 默认为 admin(1)
+      await this.db.exec('ALTER TABLE sites ADD COLUMN is_deleted INTEGER DEFAULT 0;');
     } catch { }
     try {
-      await this.db.exec('CREATE INDEX IF NOT EXISTS idx_groups_user_id ON groups(user_id);');
+      await this.db.exec('ALTER TABLE sites ADD COLUMN deleted_at TIMESTAMP;');
+    } catch { }
+    try {
+      await this.db.exec('CREATE INDEX IF NOT EXISTS idx_sites_is_deleted ON sites(is_deleted);');
     } catch { }
 
     // 迁移：groups 表添加 user_id 字段
@@ -216,12 +219,12 @@ export class NavigationAPI {
 
     // 先创建groups表
     await this.db.exec(
-      `CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
+      `CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, user_id INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
     );
 
     // 再创建sites表
     await this.db.exec(
-      `CREATE TABLE IF NOT EXISTS sites (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, icon TEXT, description TEXT, notes TEXT, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE);`
+      `CREATE TABLE IF NOT EXISTS sites (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, icon TEXT, description TEXT, notes TEXT, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, is_deleted INTEGER DEFAULT 0, deleted_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE);`
     );
 
     // 创建全局配置表
@@ -916,12 +919,12 @@ export class NavigationAPI {
   }
 
   // Restore site
-  async restoreSite(id: number): Promise<boolean> {
+  async restoreSite(id: number): Promise<Site | null> {
     const result = await this.db
-      .prepare('UPDATE sites SET is_deleted = 0, deleted_at = NULL WHERE id = ?')
+      .prepare('UPDATE sites SET is_deleted = 0, deleted_at = NULL WHERE id = ? RETURNING *')
       .bind(id)
-      .run();
-    return result.success;
+      .first<Site>();
+    return result || null;
   }
 
   // Get trash sites

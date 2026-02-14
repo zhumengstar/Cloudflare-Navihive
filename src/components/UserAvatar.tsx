@@ -28,16 +28,20 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import RecycleBin from './RecycleBin';
+import { NavigationClient } from '../API/client';
+import { MockNavigationClient } from '../API/mock';
+import { Site } from '../API/http';
 
 interface UserAvatarProps {
     username: string;
     onLogout: () => void;
-    onLogout: () => void;
     onChangePassword?: (oldPassword: string, newPassword: string) => Promise<boolean>;
-    onSiteRestored?: () => void;
+    onSiteRestored: (site: Site) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    api: any;
 }
 
-const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePassword, onSiteRestored }) => {
+const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePassword, onSiteRestored, api }) => {
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [infoOpen, setInfoOpen] = useState(false);
     const [changePwdOpen, setChangePwdOpen] = useState(false);
@@ -130,9 +134,9 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
         setRecycleBinOpen(false);
     };
 
-    const handleRestoreSite = () => {
+    const handleRestoreSite = (site: Site) => {
         if (onSiteRestored) {
-            onSiteRestored();
+            onSiteRestored(site);
         }
     };
 
@@ -392,6 +396,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
                 open={recycleBinOpen}
                 onClose={handleRecycleBinClose}
                 onRestore={handleRestoreSite}
+                api={api}
             />
         </>
     );

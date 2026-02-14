@@ -351,10 +351,10 @@ export class MockNavigationClient {
     return this.softDeleteSite(id);
   }
 
-  async restoreSite(id: number): Promise<boolean> {
+  async restoreSite(id: number): Promise<Site | null> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const index = mockSites.findIndex((s) => s.id === id);
-    if (index === -1) return false;
+    if (index === -1) return null;
 
     const existing = mockSites[index];
     if (existing) {
@@ -364,11 +364,12 @@ export class MockNavigationClient {
         deleted_at: undefined
       };
       saveSitesToStorage();
+      return mockSites[index];
     }
-    return true;
+    return null;
   }
 
-  async getTrashSites(userId?: number): Promise<Site[]> {
+  async getTrashSites(): Promise<Site[]> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     // 简单模拟，忽略 userId 过滤（假设都是当前用户的）
     return mockSites.filter(s => s.is_deleted === 1).sort((a, b) => {

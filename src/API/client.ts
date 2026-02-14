@@ -249,11 +249,11 @@ export class NavigationClient {
     return response.success;
   }
 
-  async restoreSite(id: number): Promise<boolean> {
+  async restoreSite(id: number): Promise<Site | null> {
     const response = await this.request(`sites/${id}/restore`, {
       method: 'POST',
     });
-    return response.success;
+    return response;
   }
 
   async getTrashSites(): Promise<Site[]> {

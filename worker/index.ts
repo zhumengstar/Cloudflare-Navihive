@@ -858,6 +858,9 @@ export default {
 
                     const result = await env.DB.prepare(query).bind(...params).all();
                     return createJsonResponse(result.results || [], request);
+                } else if (path === "sites/trash" && method === "GET") {
+                    const sites = await api.getTrashSites(currentUserId);
+                    return createJsonResponse(sites, request);
                 } else if (path.startsWith("sites/") && method === "GET") {
                     const idStr = path.split("/")[1];
                     if (!idStr) {
@@ -957,9 +960,7 @@ export default {
 
                     const result = await api.softDeleteSite(id);
                     return createJsonResponse({ success: result }, request);
-                } else if (path === "sites/trash" && method === "GET") {
-                    const sites = await api.getTrashSites(currentUserId);
-                    return createJsonResponse(sites, request);
+
                 } else if (path.startsWith("sites/") && path.endsWith("/restore") && method === "POST") {
                     // Extract ID from /sites/123/restore
                     const parts = path.split("/");
@@ -976,7 +977,10 @@ export default {
                     }
 
                     const result = await api.restoreSite(id);
-                    return createJsonResponse({ success: result }, request);
+                    if (!result) {
+                        return createJsonResponse({ error: "恢复失败或站点不存在" }, request, { status: 404 });
+                    }
+                    return createJsonResponse(result, request);
 
                 } else if (path.startsWith("sites/") && path.endsWith("/permanent") && method === "DELETE") {
                     // Extract ID from /sites/123/permanent
