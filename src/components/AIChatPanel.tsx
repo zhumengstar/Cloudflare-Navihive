@@ -164,6 +164,51 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
 
     const isDark = theme.palette.mode === 'dark';
 
+    // 宽度调整逻辑
+    const [chatWidth, setChatWidth] = useState(() => {
+        const saved = localStorage.getItem(`chat_width_${username}`);
+        return saved ? parseInt(saved) : 380;
+    });
+    const [isResizing, setIsResizing] = useState(false);
+    const startXRef = useRef<number>(0);
+    const startWidthRef = useRef<number>(chatWidth);
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        setIsResizing(true);
+        startXRef.current = e.clientX;
+        startWidthRef.current = chatWidth;
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isResizing) return;
+            const delta = startXRef.current - e.clientX;
+            const newWidth = Math.min(Math.max(300, startWidthRef.current + delta), 800);
+            setChatWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            if (isResizing) {
+                setIsResizing(false);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                localStorage.setItem(`chat_width_${username}`, chatWidth.toString());
+            }
+        };
+
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing, chatWidth, username]);
+
     return (
         <>
             {/* 悬浮按钮 */}
@@ -198,7 +243,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                         position: 'fixed',
                         bottom: 24,
                         right: 16,
-                        width: { xs: 'calc(100vw - 32px)', sm: 380 },
+                        width: { xs: 'calc(100vw - 32px)', sm: chatWidth },
                         height: { xs: 'calc(100vh - 100px)', sm: 520 },
                         zIndex: 1300,
                         borderRadius: 3,
@@ -206,8 +251,25 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                         flexDirection: 'column',
                         overflow: 'hidden',
                         border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+                        transition: isResizing ? 'none' : 'width 0.2s ease-out, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     }}
                 >
+                    {/* 调整宽度手柄 (左侧) */}
+                    <Box
+                        onMouseDown={handleMouseDown}
+                        sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: 6,
+                            cursor: 'ew-resize',
+                            zIndex: 10,
+                            '&:hover': {
+                                bgcolor: 'rgba(25, 118, 210, 0.1)',
+                            },
+                        }}
+                    />
                     {/* 头部 */}
                     <Box
                         sx={{
