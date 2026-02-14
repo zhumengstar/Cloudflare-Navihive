@@ -1454,9 +1454,9 @@ function App() {
                 right: 0,
                 bottom: 0,
                 backgroundImage: `url(${configs['site.backgroundImage']})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+                backgroundSize: '100% auto', // 宽度铺满，高度按比例自适应
+                backgroundPosition: 'top center', // 从顶部开始
+                backgroundRepeat: 'repeat-y', // 纵向重复
                 zIndex: 0,
                 '&::before': {
                   content: '""',
