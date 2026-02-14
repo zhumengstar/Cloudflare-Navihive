@@ -67,8 +67,8 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
         }
     }, [messages, username]);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+        messagesEndRef.current?.scrollIntoView({ behavior });
     };
 
     useEffect(() => {
@@ -76,8 +76,12 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
     }, [messages]);
 
     useEffect(() => {
-        if (open && inputRef.current) {
-            setTimeout(() => inputRef.current?.focus(), 300);
+        if (open) {
+            if (inputRef.current) {
+                setTimeout(() => inputRef.current?.focus(), 300);
+            }
+            // Use 'auto' (instant) for initial open scroll
+            scrollToBottom('auto');
         }
     }, [open]);
 
