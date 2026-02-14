@@ -125,14 +125,16 @@ const GroupCard: React.FC<GroupCardProps> = ({
 
   // 添加折叠状态
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    const savedState = localStorage.getItem(`group-${group.id}-collapsed`);
-    return savedState ? JSON.parse(savedState) : false;
+    // 使用新的 key 前缀以重置旧用户的展开/折叠状态
+    const savedState = localStorage.getItem(`group-collapse-v2-${group.id}`);
+    // 如果没有新版状态，默认为 true (合上)
+    return savedState === null ? true : JSON.parse(savedState);
   });
 
   // 保存折叠状态到本地存储
   useEffect(() => {
     if (group.id) {
-      localStorage.setItem(`group-${group.id}-collapsed`, JSON.stringify(isCollapsed));
+      localStorage.setItem(`group-collapse-v2-${group.id}`, JSON.stringify(isCollapsed));
     }
   }, [isCollapsed, group.id]);
 

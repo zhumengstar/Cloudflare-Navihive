@@ -280,14 +280,8 @@ function App() {
   // 检查认证状态
   const checkAuthStatus = async () => {
     try {
-      setIsAuthChecking(true);
+      // setIsAuthChecking(true); // 不再在这里设置，我们在 useEffect 开始时设置
       console.log('开始检查认证状态...');
-
-      // 确保数据库已初始化
-      await api.initDB();
-
-      // 这里先加载配置，因为配置决定了页面背景和标题，优先展示可以减少视觉突跳
-      await fetchConfigs();
 
       // 尝试进行API调用,检查是否需要认证
       const result = await api.checkAuthStatus();
@@ -323,6 +317,7 @@ function App() {
       await fetchData().catch(e => console.error('最终业务负载失败:', e));
     } finally {
       setIsAuthChecking(false);
+      setLoading(false); // 确保 loading 也会关闭
     }
   };
 
@@ -448,19 +443,34 @@ function App() {
   };
 
   useEffect(() => {
+    // 立即开始初始化，但不阻塞渲染
     const init = async () => {
-      // 初始化数据库（检查迁移）
-      await api.initDB();
-      // 检查认证状态
-      await checkAuthStatus();
+      try {
+        setLoading(true);
+        setIsAuthChecking(true);
 
-      // 检查 URL 参数是否请求登录 (隐式入口)
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('login') !== null || params.get('admin') !== null) {
-        setIsLoginOpen(true);
+        // 并行加载配置和初始化数据库（如果需要）
+        // 配置会立即影响 UI（标题、自定义 CSS 等）
+        const configPromise = fetchConfigs();
+        const dbPromise = api.initDB();
+
+        await Promise.all([configPromise, dbPromise]);
+
+        // 数据库初始化和配置加载后，进行认证检查和业务数据加载
+        checkAuthStatus();
+      } catch (error) {
+        console.error('初始化失败:', error);
+        setLoading(false);
+        setIsAuthChecking(false);
       }
     };
     init();
+
+    // 检查 URL 参数是否请求登录 (隐式入口)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('login') !== null || params.get('admin') !== null) {
+      setIsLoginOpen(true);
+    }
 
     // 确保初始化时重置排序状态
     setSortMode(SortMode.None);
