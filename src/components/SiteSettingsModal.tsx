@@ -26,6 +26,7 @@ import {
   Alert,
   FormControlLabel,
   Switch,
+  useMediaQuery,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -51,6 +52,7 @@ export default function SiteSettingsModal({
   iconApi = 'https://www.faviconextractor.com/favicon/{domain}?larger=true',
 }: SiteSettingsModalProps) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // 存储字符串形式的group_id，与Material-UI的Select兼容
   const [formData, setFormData] = useState({
@@ -181,6 +183,7 @@ export default function SiteSettingsModal({
       onClose={onClose}
       fullWidth
       maxWidth='sm'
+      fullScreen={isMobile}
       PaperProps={{
         sx: {
           borderRadius: 2,

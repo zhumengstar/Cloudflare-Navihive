@@ -19,6 +19,9 @@ import {
   ListItemText,
   Divider,
   Chip,
+  useMediaQuery,
+  Typography,
+  useTheme,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -56,6 +59,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   onInternalResultClick,
   onDelete,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('internal');
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -265,23 +270,43 @@ const SearchBox: React.FC<SearchBoxProps> = ({
 
   return (
     <Box ref={searchBoxRef} sx={{ position: 'relative', width: '100%', maxWidth: 800, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 1
+        }}
+      >
         {/* 搜索模式切换 - 移到外侧 */}
         <ToggleButtonGroup
           value={mode}
           exclusive
           onChange={handleModeChange}
           size='small'
-          sx={{ flexShrink: 0 }}
+          fullWidth={isMobile}
+          sx={{
+            flexShrink: 0,
+            '& .MuiToggleButton-root': {
+              flex: { xs: 1, sm: 'initial' },
+              py: { xs: 0.5, sm: 0.5 }
+            }
+          }}
         >
           <ToggleButton value='internal' aria-label='站内搜索'>
             <Tooltip title='站内搜索'>
-              <LocalIcon fontSize='small' />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <LocalIcon fontSize='small' />
+                <Typography variant='caption' sx={{ display: { xs: 'block', sm: 'none' } }}>站内</Typography>
+              </Box>
             </Tooltip>
           </ToggleButton>
           <ToggleButton value='external' aria-label='站外搜索'>
             <Tooltip title='站外搜索'>
-              <GlobalIcon fontSize='small' />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <GlobalIcon fontSize='small' />
+                <Typography variant='caption' sx={{ display: { xs: 'block', sm: 'none' } }}>站外</Typography>
+              </Box>
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>

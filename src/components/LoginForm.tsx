@@ -222,10 +222,11 @@ const LoginForm: React.FC<LoginFormProps> = ({
       <Paper
         elevation={3}
         sx={{
-          p: { xs: 3, sm: 4 },
-          borderRadius: 2,
+          p: { xs: 2.5, sm: 4 },
+          borderRadius: { xs: 0, sm: 2 },
           width: '100%',
-          maxWidth: { xs: '90%', sm: 400 },
+          maxWidth: { xs: '100%', sm: 400 },
+          minHeight: { xs: '100vh', sm: 'auto' },
           backgroundColor: (theme) =>
             theme.palette.mode === 'dark' ? 'rgba(33, 33, 33, 0.9)' : 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',

@@ -20,6 +20,8 @@ import {
     TextField,
     Alert,
     CircularProgress,
+    useMediaQuery,
+    useTheme,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -65,6 +67,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     onOpenAddGroup,
     api
 }) => {
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     // ... (keep existing state)
 
@@ -381,7 +385,13 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
             </Menu>
 
             {/* 账号信息对话框 */}
-            <Dialog open={infoOpen} onClose={handleInfoClose} maxWidth='xs' fullWidth>
+            <Dialog
+                open={infoOpen}
+                onClose={handleInfoClose}
+                maxWidth='xs'
+                fullWidth
+                fullScreen={isMobile}
+            >
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <AccountCircleIcon color='primary' />
                     账号信息
@@ -494,7 +504,13 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
             </Dialog>
 
             {/* 修改密码对话框 */}
-            <Dialog open={changePwdOpen} onClose={handleChangePwdClose} maxWidth='xs' fullWidth>
+            <Dialog
+                open={changePwdOpen}
+                onClose={handleChangePwdClose}
+                maxWidth='xs'
+                fullWidth
+                fullScreen={isMobile}
+            >
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <LockResetIcon color='primary' />
                     修改密码

@@ -414,6 +414,7 @@ const SiteCard = memo(function SiteCard({
                   bgcolor: 'action.hover',
                   opacity: 0,
                   transition: 'opacity 0.2s',
+                  p: { xs: 1, sm: 0.5 },
                   '&:hover': {
                     bgcolor: 'action.selected',
                   },

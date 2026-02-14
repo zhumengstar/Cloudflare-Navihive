@@ -245,7 +245,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
                         xs: '50%',
                         sm: '33.33%',
                         md: '25%',
-                        lg: '16.666%',
+                        lg: '20%',
                         xl: '16.666%',
                       },
                       padding: 1,
@@ -292,7 +292,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
                 xs: '50%',
                 sm: '33.33%',
                 md: '25%',
-                lg: '16.666%',
+                lg: '20%',
                 xl: '16.666%',
               },
               padding: 1, // 内部间距，更均匀的分布

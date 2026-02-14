@@ -11,6 +11,7 @@ import {
     Slide,
     useTheme,
     CircularProgress,
+    useMediaQuery,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,6 +43,7 @@ interface AIChatPanelProps {
 
 const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
     const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const [open, setOpen] = useState(false);
 
     // Lazy initialization from localStorage
@@ -219,9 +221,11 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                     onClick={() => setOpen(true)}
                     sx={{
                         position: 'fixed',
-                        bottom: 24,
-                        right: 16,
+                        bottom: { xs: 16, sm: 24 },
+                        right: { xs: 16, sm: 24 },
                         zIndex: 1200,
+                        width: { xs: 48, sm: 56 },
+                        height: { xs: 48, sm: 56 },
                         boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
                         background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                         '&:hover': {
@@ -241,8 +245,8 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                     elevation={12}
                     sx={{
                         position: 'fixed',
-                        bottom: 24,
-                        right: 16,
+                        bottom: { xs: 16, sm: 24 },
+                        right: { xs: 16, sm: 24 },
                         width: { xs: 'calc(100vw - 32px)', sm: chatWidth },
                         height: { xs: 'calc(100vh - 100px)', sm: 520 },
                         zIndex: 1300,

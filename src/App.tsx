@@ -1574,19 +1574,20 @@ function App() {
         <Container
           maxWidth='lg'
           sx={{
-            py: 4,
-            px: { xs: 2, sm: 3, md: 4 },
+            py: { xs: 2, sm: 3, md: 4 },
+            px: { xs: 1.5, sm: 2, md: 3 },
             position: 'relative', // 使内容位于背景图片和蒙版之上
             zIndex: 2,
+            transition: 'padding 0.3s ease',
           }}
         >
           <Box
             sx={{
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: 5,
               flexDirection: { xs: 'column', sm: 'row' },
+              justifyContent: 'space-between',
+              alignItems: { xs: 'center', sm: 'flex-start' },
+              mb: { xs: 4, sm: 5 },
               gap: { xs: 2, sm: 0 },
             }}
           >
@@ -1596,20 +1597,20 @@ function App() {
               fontWeight='bold'
               color='text.primary'
               sx={{
-                fontSize: { xs: '1.75rem', sm: '2.125rem', md: '3rem' },
+                fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
                 textAlign: { xs: 'center', sm: 'left' },
+                mb: { xs: 0, sm: 0 }
               }}
             >
               {configs['site.name']}
             </Typography>
             <Stack
-              direction={{ xs: 'row', sm: 'row' }}
-              spacing={{ xs: 1, sm: 2 }}
+              direction='row'
+              spacing={1}
               alignItems='center'
-              width={{ xs: '100%', sm: 'auto' }}
               justifyContent={{ xs: 'center', sm: 'flex-end' }}
               flexWrap='wrap'
-              sx={{ gap: { xs: 1, sm: 2 }, py: { xs: 1, sm: 0 } }}
+              sx={{ gap: 1 }}
             >
               {sortMode !== SortMode.None ? (
                 <>
