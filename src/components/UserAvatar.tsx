@@ -154,8 +154,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ username, onLogout, onChangePas
             >
                 <Avatar
                     sx={{
-                        width: 36,
-                        height: 36,
+                        width: 40,
+                        height: 40,
                         bgcolor: getAvatarColor(),
                         fontSize: '1rem',
                         fontWeight: 'bold',

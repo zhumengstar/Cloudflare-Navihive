@@ -16,7 +16,8 @@ export default function ThemeToggle({ darkMode, onToggle }: ThemeToggleProps) {
         color='inherit'
         aria-label='切换主题'
         sx={{
-          p: 1.5,
+          width: 40,
+          height: 40,
           borderRadius: '50%',
           bgcolor: 'background.paper',
           boxShadow: 1,

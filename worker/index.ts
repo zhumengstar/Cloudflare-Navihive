@@ -370,6 +370,7 @@ export default {
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
+                        /*
                         if (!loginRateLimiter.check(clientIP)) {
                             const remaining = loginRateLimiter.getRemaining(clientIP);
                             log({
@@ -389,6 +390,7 @@ export default {
                                 { status: 429 } // 429 Too Many Requests
                             );
                         }
+                        */
 
                         const loginData = (await validateRequestBody(request)) as LoginInput;
 
@@ -470,6 +472,7 @@ export default {
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
+                        /*
                         if (!loginRateLimiter.check(clientIP)) {
                             return createJsonResponse(
                                 {
@@ -480,6 +483,7 @@ export default {
                                 { status: 429 }
                             );
                         }
+                        */
 
                         const registerData = (await validateRequestBody(request)) as RegisterInput;
 
@@ -519,6 +523,7 @@ export default {
                             request.headers.get('X-Forwarded-For') ||
                             'unknown';
 
+                        /*
                         if (!loginRateLimiter.check(clientIP)) {
                             return createJsonResponse(
                                 {
@@ -529,6 +534,7 @@ export default {
                                 { status: 429 }
                             );
                         }
+                        */
 
                         const resetData = (await validateRequestBody(request)) as ResetPasswordInput;
 
