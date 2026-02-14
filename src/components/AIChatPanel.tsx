@@ -12,6 +12,7 @@ import {
     useTheme,
     CircularProgress,
 } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
 import {
     SmartToy as SmartToyIcon,
     Close as CloseIcon,
@@ -71,30 +72,53 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                 role: m.role,
                 content: m.content,
             }));
-            const result = await api.chat(trimmed, history);
 
-            if (result.success && result.reply) {
-                setMessages((prev) => [
-                    ...prev,
-                    { role: 'assistant', content: result.reply },
-                ]);
-            } else {
-                setMessages((prev) => [
-                    ...prev,
-                    {
-                        role: 'assistant',
-                        content: result.message || '抱歉，我暂时无法回答。请稍后再试。',
-                    },
-                ]);
-            }
-        } catch {
+            // 添加一个空的助理消息用于流显示
             setMessages((prev) => [
                 ...prev,
-                {
-                    role: 'assistant',
-                    content: '网络错误，请检查连接后重试。',
-                },
+                { role: 'assistant', content: '' },
             ]);
+
+            let fullReply = '';
+
+            if (api.chatStream) {
+                await api.chatStream(trimmed, history, (text: string) => {
+                    fullReply += text;
+                    setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg && lastMsg.role === 'assistant') {
+                            lastMsg.content = fullReply;
+                        }
+                        return newMessages;
+                    });
+                });
+            } else {
+                // 降级兼容
+                const result = await api.chat(trimmed, history);
+                if (result.success && result.reply) {
+                    setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg) lastMsg.content = result.reply!;
+                        return newMessages;
+                    });
+                } else {
+                    setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg) lastMsg.content = result.message || '抱歉，我暂时无法回答。';
+                        return newMessages;
+                    });
+                }
+            }
+        } catch {
+            setMessages((prev) => {
+                const newMessages = [...prev];
+                const lastMsg = newMessages[newMessages.length - 1];
+                if (lastMsg) lastMsg.content = '网络错误，请检查连接后重试。';
+                return newMessages;
+            });
         } finally {
             setLoading(false);
         }
@@ -250,12 +274,42 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api }) => {
                                             : `0 1px 3px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.08)'}`,
                                     }}
                                 >
-                                    <Typography
-                                        variant="body2"
-                                        sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: '0.85rem' }}
+                                    <Box
+                                        sx={{
+                                            '& p': { m: 0, lineHeight: 1.6, fontSize: '0.85rem' },
+                                            '& p + p': { mt: 1 },
+                                            '& ul, & ol': { m: 0, pl: 2.5, mt: 0.5 },
+                                            '& li': { mb: 0.5 },
+                                            '& code': {
+                                                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                                px: 0.6,
+                                                py: 0.2,
+                                                borderRadius: 1,
+                                                fontFamily: 'monospace',
+                                                fontSize: '0.8em',
+                                            },
+                                            '& pre': {
+                                                bgcolor: isDark ? 'rgba(0,0,0,0.3)' : '#f5f5f5',
+                                                p: 1.5,
+                                                borderRadius: 2,
+                                                overflowX: 'auto',
+                                                my: 1,
+                                                '& code': {
+                                                    bgcolor: 'transparent',
+                                                    p: 0,
+                                                    color: isDark ? '#e0e0e0' : '#333',
+                                                },
+                                            },
+                                            '& a': {
+                                                color: msg.role === 'user'
+                                                    ? '#fff'
+                                                    : theme.palette.primary.main,
+                                                textDecoration: 'underline',
+                                            },
+                                        }}
                                     >
-                                        {msg.content}
-                                    </Typography>
+                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    </Box>
                                 </Box>
                             </Box>
                         ))}

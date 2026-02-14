@@ -528,6 +528,36 @@ export class MockNavigationClient {
     }
   }
 
+  // AI 智能问答 (流式 - 模拟)
+  async chatStream(
+    message: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _history: { role: string; content: string }[],
+    onUpdate: (text: string) => void
+  ): Promise<void> {
+    // 复用 chat 方法获取完整回复
+    const result = await this.chat(message, []);
+    if (!result.success || !result.reply) return;
+
+    const reply = result.reply;
+    const chunkSize = 5; // 每次发送5个字符
+    let current = 0;
+
+    return new Promise<void>((resolve) => {
+      onUpdate(''); // 初始化
+      const interval = setInterval(() => {
+        if (current >= reply.length) {
+          clearInterval(interval);
+          resolve();
+          return;
+        }
+        const chunk = reply.slice(current, current + chunkSize);
+        onUpdate(chunk);
+        current += chunkSize;
+      }, 30); // 每30ms发送一次
+    });
+  }
+
   // AI 智能问答（模拟）
   async chat(
     message: string,

@@ -309,7 +309,63 @@ export class NavigationClient {
     return response;
   }
 
-  // AI 智能问答
+  // AI 智能问答 (流式)
+  async chatStream(
+    message: string,
+    history: { role: string; content: string }[],
+    onUpdate: (text: string) => void
+  ): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message, history }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI 服务暂不可用');
+      }
+
+      if (!response.body) return;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留未完整的行
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') continue;
+            try {
+              const data = JSON.parse(dataStr);
+              // 兼容 Cloudflare AI 和 OpenAI 格式
+              const content = data.response || data.choices?.[0]?.delta?.content || '';
+              if (content) {
+                onUpdate(content);
+              }
+            } catch (e) {
+              console.warn('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('AI 流式问答失败:', error);
+      throw error;
+    }
+  }
+
+  // AI 智能问答 (普通)
   async chat(
     message: string,
     history: { role: string; content: string }[] = []

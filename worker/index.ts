@@ -1108,6 +1108,17 @@ export default {
 
                 // AI 智能问答路由
                 else if (path === "chat" && method === "POST") {
+                    // 模型配置 - 切换模型时只需修改这里
+                    const AI_MODEL = {
+                        name: '@cf/zai-org/glm-4.7-flash' as keyof AiModels,
+                        contextWindow: 131072, // tokens
+                    };
+
+                    // 根据上下文窗口动态计算书签限制
+                    // 预留 30% 给系统提示词、对话历史和模型回复
+                    const maxContextChars = Math.floor(AI_MODEL.contextWindow * 0.7 * 2); // 1 token ≈ 2 中文字符
+                    const maxSites = Math.min(500, Math.floor(maxContextChars / 80)); // 每条书签约 80 字符
+
                     const body = (await validateRequestBody(request)) as {
                         message: string;
                         history?: { role: string; content: string }[];
@@ -1124,12 +1135,22 @@ export default {
                     // 查询用户书签数据作为上下文
                     let bookmarkContext = '';
                     try {
+                        // 确保只查询当前用户的书签
+                        // 如果未启用认证或未登录，默认使用管理员账号(ID=1)的数据，或者也可以选择不返回数据
+                        const userId = currentUserId || 1;
+
                         const groups = await env.DB.prepare(
-                            'SELECT id, name FROM groups ORDER BY order_num'
-                        ).all();
+                            'SELECT id, name FROM groups WHERE user_id = ? ORDER BY order_num'
+                        ).bind(userId).all();
+
                         const sites = await env.DB.prepare(
-                            'SELECT name, url, description, group_id FROM sites ORDER BY order_num'
-                        ).all();
+                            `SELECT s.name, s.url, s.description, s.group_id 
+                             FROM sites s 
+                             JOIN groups g ON s.group_id = g.id 
+                             WHERE g.user_id = ? 
+                             ORDER BY s.order_num 
+                             LIMIT ${maxSites}`
+                        ).bind(userId).all();
 
                         if (groups.results && sites.results) {
                             const groupMap = new Map<number, string>();
@@ -1142,6 +1163,9 @@ export default {
                                 lines.push(`[${gName}] ${s.name}: ${s.url}${s.description ? ' - ' + s.description : ''}`);
                             }
                             bookmarkContext = lines.join('\n');
+                            if (bookmarkContext.length > maxContextChars) {
+                                bookmarkContext = bookmarkContext.substring(0, maxContextChars) + '\n...(更多书签已省略)';
+                            }
                         }
                     } catch (e) {
                         console.error('查询书签上下文失败:', e);
@@ -1162,23 +1186,34 @@ ${bookmarkContext ? `以下是用户保存的书签数据：\n${bookmarkContext}
                     ];
 
                     try {
+                        if (!env.AI) {
+                            return createJsonResponse(
+                                { success: false, message: 'AI 服务未配置，请检查 wrangler.jsonc 中的 ai 绑定' },
+                                request,
+                                { status: 503 }
+                            );
+                        }
+
                         const aiResponse = await env.AI.run(
-                            '@cf/meta/llama-3.1-8b-instruct',
-                            { messages, stream: false }
+                            AI_MODEL.name,
+                            { messages, stream: true }
                         );
 
-                        const responseText = typeof aiResponse === 'string'
-                            ? aiResponse
-                            : (aiResponse as { response?: string }).response || JSON.stringify(aiResponse);
-
-                        return createJsonResponse(
-                            { success: true, reply: responseText },
-                            request
-                        );
+                        const allowedOrigin = request.headers.get("Origin") || "*";
+                        return new Response(aiResponse as ReadableStream, {
+                            headers: {
+                                "content-type": "text/event-stream",
+                                "Access-Control-Allow-Origin": allowedOrigin,
+                                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                                "Access-Control-Allow-Credentials": "true",
+                            },
+                        });
                     } catch (aiError) {
-                        console.error('AI 调用失败:', aiError);
+                        const errorMsg = aiError instanceof Error ? aiError.message : String(aiError);
+                        console.error('AI 调用失败:', errorMsg);
                         return createJsonResponse(
-                            { success: false, message: 'AI 服务暂不可用，请稍后重试' },
+                            { success: false, message: `AI 服务暂不可用: ${errorMsg}` },
                             request,
                             { status: 503 }
                         );
