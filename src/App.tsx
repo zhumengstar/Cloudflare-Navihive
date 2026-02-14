@@ -294,14 +294,13 @@ function App() {
       if (!result) {
         // 未认证，设置为访客模式
         console.log('未认证，设置访客模式');
-        if (api.isLoggedIn()) {
-          api.logout();
-        }
+        api.isAuthenticated = false; // 同步 API 客户端状态
         setIsAuthenticated(false);
         setIsAuthRequired(false);
         setViewMode('readonly');
       } else {
         // 已认证，设置为编辑模式
+        api.isAuthenticated = true; // 同步 API 客户端状态
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');

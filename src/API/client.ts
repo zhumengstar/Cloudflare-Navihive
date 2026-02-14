@@ -12,9 +12,7 @@ export class NavigationClient {
 
   // 检查是否已登录（通过尝试请求来判断）
   isLoggedIn(): boolean {
-    // Cookie 由浏览器自动管理，无法直接检查
-    // 需要通过 API 调用来验证
-    return true; // 实际验证在 checkAuthStatus 中
+    return this.isAuthenticated;
   }
 
   // 登录API
@@ -117,18 +115,16 @@ export class NavigationClient {
       // 认证失败
       this.isAuthenticated = false;
 
-      // 对于 GET 请求（只读操作），允许返回空数据而不抛出异常
+      // 对于 GET 请求（只读操作），允许返回数据而不抛出异常 (如果后端允许访客访问)
       if (!options.method || options.method === 'GET') {
-        // 尝试解析响应，如果是访客模式可能返回部分数据
         try {
-          return response.json();
+          // 这里返回 JSON，即使状态码是 401，后端可能仍然返回了公开数据
+          return await response.json();
         } catch {
-          // 如果无法解析，返回空数组/对象
           return endpoint.includes('config') ? {} : [];
         }
       }
 
-      // 对于写操作（POST/PUT/DELETE），必须抛出异常
       throw new Error('认证已过期或无效，请重新登录');
     }
 
