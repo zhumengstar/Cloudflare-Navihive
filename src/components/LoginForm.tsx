@@ -10,10 +10,14 @@ import {
   FormControlLabel,
   Checkbox,
   Link,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
 type FormMode = 'login' | 'register' | 'resetPassword';
 
@@ -48,14 +52,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const resetForm = () => {
     setUsername('');
     setPassword('');
     setConfirmPassword('');
-    setRememberMe(false);
+    setRememberMe(true);
     setLocalError(null);
   };
 
@@ -235,13 +240,26 @@ const LoginForm: React.FC<LoginFormProps> = ({
             fullWidth
             name='password'
             label={mode === 'resetPassword' ? '新密码' : '密码'}
-            type='password'
+            type={showPassword ? 'text' : 'password'}
             id='password'
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
             sx={{ mb: 2 }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
 
           {/* 注册和密码重置模式：确认密码 */}
@@ -252,13 +270,26 @@ const LoginForm: React.FC<LoginFormProps> = ({
               fullWidth
               name='confirmPassword'
               label={mode === 'resetPassword' ? '确认新密码' : '确认密码'}
-              type='password'
+              type={showPassword ? 'text' : 'password'}
               id='confirmPassword'
               autoComplete='new-password'
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={isLoading}
               sx={{ mb: 2 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
           )}
 
