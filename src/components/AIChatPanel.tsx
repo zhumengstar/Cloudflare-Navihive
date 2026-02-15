@@ -12,6 +12,8 @@ import {
     useTheme,
     CircularProgress,
     ClickAwayListener,
+    MenuItem,
+    Popover,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -23,6 +25,7 @@ import {
     DeleteOutline as DeleteIcon,
     KeyboardArrowUp as UpIcon,
     KeyboardArrowDown as DownIcon,
+    BookmarkAdd as BookmarkAddIcon,
 } from '@mui/icons-material';
 
 const DEFAULT_MESSAGES: ChatMessage[] = [
@@ -41,9 +44,11 @@ interface AIChatPanelProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
     username: string;
+    groups: any[];
+    onAddSite: (site: any) => Promise<boolean>;
 }
 
-const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
+const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username, groups, onAddSite }) => {
     const theme = useTheme();
     const [open, setOpen] = useState(false);
 
@@ -64,6 +69,41 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
     const topRef = useRef<HTMLDivElement>(null);
     const isDark = theme.palette.mode === 'dark';
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Bookmark adding state
+    const [pendingSite, setPendingSite] = useState<{ name: string, url: string } | null>(null);
+    const [anchorPosition, setAnchorPosition] = useState<{ top: number, left: number } | null>(null);
+
+    const handleLinkAddClick = (event: React.MouseEvent<HTMLElement>, title: string, url: string) => {
+        event.stopPropagation();
+        event.preventDefault();
+        setPendingSite({ name: title, url });
+        setAnchorPosition({
+            top: event.clientY,
+            left: event.clientX,
+        });
+    };
+
+    const handleGroupSelect = (groupId: number) => {
+        if (pendingSite && onAddSite) {
+            // 立即清理状态并关闭菜单，实现无感交互
+            const siteToAdd = { ...pendingSite, groupId };
+            setAnchorPosition(null);
+            setPendingSite(null);
+
+            // 在后台执行异步添加操作
+            onAddSite(siteToAdd).then(success => {
+                if (success) {
+                    // 成功反馈已在 App.tsx 中通过 snackbar 处理
+                }
+            }).catch(error => {
+                console.error('Background bookmark addition failed:', error);
+            });
+        } else {
+            setAnchorPosition(null);
+            setPendingSite(null);
+        }
+    };
 
     // Save to localStorage whenever messages change
     useEffect(() => {
@@ -451,13 +491,54 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
                                                 components={{
-                                                    a: ({ node, ...props }) => (
-                                                        <a
-                                                            {...props}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
+                                                    a: ({ node, children, ...props }) => (
+                                                        <Box
+                                                            component="span"
+                                                            sx={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: 0.5,
+                                                                verticalAlign: 'middle',
+                                                                '&:hover .add-link-btn': {
+                                                                    opacity: 1,
+                                                                    visibility: 'visible',
+                                                                },
+                                                            }}
+                                                        >
+                                                            <a
+                                                                {...props}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                style={{
+                                                                    color: msg.role === 'user' ? '#fff' : theme.palette.primary.main,
+                                                                    textDecoration: 'underline'
+                                                                }}
+                                                            >
+                                                                {children}
+                                                            </a>
+                                                            <IconButton
+                                                                className="add-link-btn"
+                                                                size="small"
+                                                                onClick={(e) => handleLinkAddClick(e, String(children), props.href || '')}
+                                                                title="添加到书签"
+                                                                sx={{
+                                                                    width: 20,
+                                                                    height: 20,
+                                                                    p: 0,
+                                                                    opacity: 0,
+                                                                    visibility: 'hidden',
+                                                                    transition: 'all 0.2s ease',
+                                                                    color: msg.role === 'user' ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+                                                                    '&:hover': {
+                                                                        color: msg.role === 'user' ? '#fff' : 'primary.main',
+                                                                        transform: 'scale(1.2)',
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <BookmarkAddIcon sx={{ fontSize: 14 }} />
+                                                            </IconButton>
+                                                        </Box>
                                                     )
                                                 }}
                                             >
@@ -507,7 +588,7 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                 sx={{
                                     position: 'absolute',
                                     bottom: 80,
-                                    right: 24,
+                                    right: 16,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: 1,
@@ -515,30 +596,32 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                 }}
                             >
                                 <IconButton
-                                    size="small"
                                     onClick={() => scrollToTop()}
                                     title="回到顶部"
                                     sx={{
+                                        width: 30,
+                                        height: 30,
                                         bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                                         backdropFilter: 'blur(8px)',
                                         '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,1)' },
                                         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                                     }}
                                 >
-                                    <UpIcon fontSize="small" />
+                                    <UpIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                                 <IconButton
-                                    size="small"
                                     onClick={() => scrollToBottom()}
                                     title="回到底部"
                                     sx={{
+                                        width: 30,
+                                        height: 30,
                                         bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                                         backdropFilter: 'blur(8px)',
                                         '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,1)' },
                                         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                                     }}
                                 >
-                                    <DownIcon fontSize="small" />
+                                    <DownIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                             </Box>
                         </Box>
@@ -595,6 +678,62 @@ const AIChatPanel: React.FC<AIChatPanelProps> = ({ api, username }) => {
                                 <SendIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                         </Box>
+
+                        {/* 分组选择菜单 */}
+                        <Popover
+                            open={Boolean(anchorPosition)}
+                            anchorReference="anchorPosition"
+                            anchorPosition={anchorPosition || undefined}
+                            onClose={() => {
+                                setAnchorPosition(null);
+                            }}
+                            disableScrollLock
+                            slotProps={{
+                                paper: {
+                                    sx: {
+                                        maxHeight: 300,
+                                        width: '20ch',
+                                        borderRadius: 2,
+                                        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                        bgcolor: theme.palette.background.paper,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                    },
+                                }
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    p: 0,
+                                    position: 'sticky',
+                                    top: 0,
+                                    bgcolor: theme.palette.background.paper,
+                                    zIndex: 1,
+                                    borderBottom: `1px solid ${theme.palette.divider}`,
+                                }}
+                            >
+                                <Box sx={{ px: 2, py: 1.2 }}>
+                                    <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                                        选择存入分组
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            <Box sx={{ py: 0.5, overflowY: 'auto' }}>
+                                {groups.map((group) => (
+                                    <MenuItem
+                                        key={group.id}
+                                        onClick={() => handleGroupSelect(group.id)}
+                                        sx={{
+                                            fontSize: '0.85rem',
+                                            py: 1,
+                                            px: 2,
+                                        }}
+                                    >
+                                        {group.name}
+                                    </MenuItem>
+                                ))}
+                            </Box>
+                        </Popover>
                     </Paper>
                 </Slide>
             </Box>

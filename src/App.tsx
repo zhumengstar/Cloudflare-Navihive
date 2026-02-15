@@ -657,26 +657,33 @@ function App() {
       try {
         // 再次检查是否已经补全（避免重复请求）
         if (site.url) {
-          const info = await api.fetchSiteInfo(site.url);
+          const info = await api.fetchSiteInfo(site.url) as any;
 
           if (info.deadLink) {
-            console.warn(`检测到死链，正在自动清理: ${site.url}`);
+            // 检查是否启用了自动清理死链
+            const isAutoCleanEnabled = configs['site.autoCleanDeadLinks'] === 'true';
 
-            // 1. 添加自动删除备注
-            const autoNote = `系统自动识别：该网站打不开（${new Date().toLocaleString()}），已自动移动到回收站`;
-            const updatedNote = site.notes ? `${site.notes}\n\n${autoNote}` : autoNote;
+            if (isAutoCleanEnabled) {
+              console.warn(`检测到死链，且用户开启了自动清理: ${site.url}`);
 
-            // 2. 先更新备注，再删除（删除其实是移动到回收站）
-            await api.updateSite(site.id!, { notes: updatedNote });
-            await api.deleteSite(site.id!);
+              // 1. 添加自动删除备注
+              const autoNote = `系统自动识别：该网站打不开（${new Date().toLocaleString()}），已自动移动到回收站`;
+              const updatedNote = site.notes ? `${site.notes}\n\n${autoNote}` : autoNote;
 
-            // 3. 同步更新本地状态，从界面移除
-            setGroups(prev => prev.map(g => ({
-              ...g,
-              sites: g.sites.filter(s => s.id !== site.id)
-            })));
+              // 2. 先更新备注，再删除（删除其实是移动到回收站）
+              await api.updateSite(site.id!, { notes: updatedNote });
+              await api.deleteSite(site.id!);
 
-            handleError(`自动清理死链: ${site.name || site.url} (已移至回收站)`);
+              // 3. 同步更新本地状态，从界面移除
+              setGroups(prev => prev.map(g => ({
+                ...g,
+                sites: g.sites.filter(s => s.id !== site.id)
+              })));
+
+              handleError(`自动清理死链: ${site.name || site.url} (已移至回收站)`);
+            } else {
+              console.log(`检测到可能失效的链接，但自动清理未开启，跳过处理: ${site.url}`);
+            }
             continue; // 继续下一个
           }
 
@@ -711,7 +718,19 @@ function App() {
     try {
       if (updatedSite.id) {
         await api.updateSite(updatedSite.id, updatedSite);
-        await fetchData(); // 重新加载数据
+
+        // 局部更新本地状态，避免 fetchData 全量刷新
+        setGroups(prevGroups => prevGroups.map(group => {
+          if (group.id === updatedSite.group_id) {
+            return {
+              ...group,
+              sites: group.sites.map(s => s.id === updatedSite.id ? updatedSite : s)
+            };
+          }
+          return group;
+        }));
+
+        handleSuccess('书签更新成功');
       }
     } catch (error) {
       console.error('更新站点失败:', error);
@@ -1260,8 +1279,22 @@ function App() {
         return;
       }
 
-      await api.createSite(newSite as Site);
-      await fetchData(); // 重新加载数据
+      const createdSite = await api.createSite(newSite as Site);
+
+      // 局部更新本地状态，避免 fetchData 全量刷新
+      if (createdSite && createdSite.id) {
+        setGroups(prevGroups => prevGroups.map(group => {
+          if (group.id === createdSite.group_id) {
+            return {
+              ...group,
+              sites: [...group.sites, createdSite]
+            };
+          }
+          return group;
+        }));
+        handleSuccess('书签创建成功');
+      }
+
       handleCloseAddSite();
     } catch (error) {
       console.error('创建站点失败:', error);
@@ -1298,9 +1331,28 @@ function App() {
       // 更新配置状态
       setConfigs({ ...tempConfigs });
       handleCloseConfig();
+      handleSuccess('配置保存成功');
     } catch (error) {
       console.error('保存配置失败:', error);
       handleError('保存配置失败: ' + (error as Error).message);
+    }
+  };
+
+  // 快捷更新配置函数（供其他组件直接调用）
+  const handleUpdateConfigs = async (newConfigs: Record<string, string>) => {
+    try {
+      // 找出有变化的配置项并同步到后端
+      for (const [key, value] of Object.entries(newConfigs)) {
+        if (configs[key] !== value) {
+          await api.setConfig(key, value);
+        }
+      }
+      // 更新本地状态
+      setConfigs({ ...newConfigs });
+      handleSuccess('设置已更新');
+    } catch (error) {
+      console.error('更新配置失败:', error);
+      handleError('更新配置失败: ' + (error as Error).message);
     }
   };
 
@@ -1533,7 +1585,16 @@ function App() {
     try {
       if (updatedGroup.id) {
         await api.updateGroup(updatedGroup.id, updatedGroup);
-        await fetchData(); // 重新加载数据
+
+        // 局部更新本地状态
+        setGroups(prevGroups => prevGroups.map(group => {
+          if (group.id === updatedGroup.id) {
+            return { ...group, ...updatedGroup };
+          }
+          return group;
+        }));
+
+        handleSuccess('分组更新成功');
       }
     } catch (error) {
       console.error('更新分组失败:', error);
@@ -1545,7 +1606,11 @@ function App() {
   const handleGroupDelete = async (groupId: number) => {
     try {
       await api.deleteGroup(groupId);
-      await fetchData(); // 重新加载数据
+
+      // 局部更新本地状态
+      setGroups(prevGroups => prevGroups.filter(group => group.id !== groupId));
+
+      handleSuccess('分组已删除');
     } catch (error) {
       console.error('删除分组失败:', error);
       handleError('删除分组失败: ' + (error as Error).message);
@@ -1782,6 +1847,8 @@ function App() {
                     onExportData={handleExportData}
                     onOpenImport={handleOpenImport}
                     onOpenAddGroup={handleOpenAddGroup}
+                    configs={configs}
+                    onUpdateConfigs={handleUpdateConfigs}
                     api={api}
                   />
                 </Suspense>
@@ -2482,7 +2549,89 @@ function App() {
       {/* AI 智能问答悬浮窗 */}
       {isAuthenticated && (
         <Suspense fallback={null}>
-          <AIChatPanel api={api} username={username} />
+          <AIChatPanel
+            api={api}
+            username={username}
+            groups={groups}
+            onAddSite={async (site) => {
+              // 1. 构造初始占位数据
+              const targetGroup = groups.find(g => g.id === site.groupId);
+              const orderNum = targetGroup ? targetGroup.sites.length : 0;
+              const placeholderName = site.name || site.title || new URL(site.url).hostname;
+
+              const initialSiteData = {
+                group_id: site.groupId,
+                name: placeholderName,
+                url: site.url,
+                order_num: orderNum,
+                is_public: 1,
+                icon: '',
+                description: '',
+                notes: ''
+              };
+
+              // 2. 乐观更新 UI - 立即占据空位
+              const tempId = Date.now() * -1;
+              const optimisticallyUpdatedGroups = groups.map(group => {
+                if (group.id === site.groupId) {
+                  return {
+                    ...group,
+                    sites: [...group.sites, { ...initialSiteData, id: tempId } as any]
+                  };
+                }
+                return group;
+              });
+              setGroups(optimisticallyUpdatedGroups);
+              handleSuccess(`已开始添加 URL: ${site.url}`);
+
+              // 3. 后台执行创建与异步信息补齐
+              (async () => {
+                try {
+                  const createdSite = await api.createSite(initialSiteData);
+                  if (createdSite && createdSite.id) {
+                    // 更新本地状态：将临时 ID 替换为真实 ID
+                    setGroups(prevGroups => prevGroups.map(group => {
+                      if (group.id === site.groupId) {
+                        return {
+                          ...group,
+                          sites: group.sites.map(s => s.id === tempId ? { ...s, id: createdSite.id } : s)
+                        };
+                      }
+                      return group;
+                    }));
+
+                    // 获取真实元信息
+                    const info = await api.fetchSiteInfo(site.url) as any;
+                    if (info.success && (info.name || info.description || info.icon)) {
+                      const updatedFields = {
+                        name: info.name || placeholderName,
+                        description: info.description || '',
+                        icon: info.icon || ''
+                      };
+
+                      await api.updateSite(createdSite.id, updatedFields);
+
+                      // 局部刷新：仅更新该站点的信息
+                      setGroups(prevGroups => prevGroups.map(group => {
+                        if (group.id === site.groupId) {
+                          return {
+                            ...group,
+                            sites: group.sites.map(s => s.id === createdSite.id ? { ...s, ...updatedFields } : s)
+                          };
+                        }
+                        return group;
+                      }));
+                    }
+                  }
+                } catch (error) {
+                  console.error('Two-stage bookmarking failed:', error);
+                  handleError('后台数据同步失败');
+                }
+              })();
+
+              return true;
+            }}
+          />
         </Suspense>
       )}
     </ThemeProvider>

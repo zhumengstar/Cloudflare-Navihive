@@ -22,6 +22,8 @@ import {
     CircularProgress,
     useMediaQuery,
     useTheme,
+    Switch,
+    FormControlLabel,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -50,6 +52,8 @@ interface UserAvatarProps {
     onExportData: () => void;
     onOpenImport: () => void;
     onOpenAddGroup: () => void;
+    configs: Record<string, string>;
+    onUpdateConfigs: (newConfigs: Record<string, string>) => Promise<void>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
 }
@@ -65,6 +69,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     onExportData,
     onOpenImport,
     onOpenAddGroup,
+    configs,
+    onUpdateConfigs,
     api
 }) => {
     const theme = useTheme();
@@ -497,6 +503,36 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                             />
                             <Chip label='已登录' color='success' size='small' variant='outlined' />
+                        </ListItem>
+                        <Divider sx={{ my: 1 }} />
+                        <ListItem disablePadding sx={{ py: 0.5 }}>
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                <DeleteSweepIcon fontSize='small' color='action' />
+                            </ListItemIcon>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        size="small"
+                                        checked={configs['site.autoCleanDeadLinks'] === 'true'}
+                                        onChange={(e) => {
+                                            onUpdateConfigs({
+                                                ...configs,
+                                                'site.autoCleanDeadLinks': e.target.checked ? 'true' : 'false'
+                                            });
+                                        }}
+                                        color="primary"
+                                    />
+                                }
+                                label={
+                                    <Box>
+                                        <Typography variant="body2">自动清理死链</Typography>
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                            检测到网页无法访问时自动移动到回收站
+                                        </Typography>
+                                    </Box>
+                                }
+                                sx={{ ml: 0, width: '100%' }}
+                            />
                         </ListItem>
                     </List>
                 </DialogContent>

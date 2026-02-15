@@ -464,7 +464,7 @@ export class NavigationClient {
   }
 
   // 获取站点元数据 (标题和描述)
-  async fetchSiteInfo(url: string): Promise<{ success: boolean; name?: string; description?: string; message?: string; deadLink?: boolean }> {
+  async fetchSiteInfo(url: string): Promise<{ success: boolean; name?: string; description?: string; icon?: string; message?: string; deadLink?: boolean }> {
     try {
       return await this.request(`utils/fetch-site-info?url=${encodeURIComponent(url)}`);
     } catch (error) {

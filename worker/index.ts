@@ -1267,6 +1267,7 @@ export default {
 
                         let title = "";
                         let description = "";
+                        let icon = "";
 
                         // 使用 HTMLRewriter 提取信息
                         const rewriter = new HTMLRewriter()
@@ -1294,6 +1295,21 @@ export default {
                                 element(e) {
                                     if (!description) description = e.getAttribute("content") || "";
                                 }
+                            })
+                            .on("link[rel='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']", {
+                                element(e) {
+                                    if (!icon) {
+                                        let href = e.getAttribute("href") || "";
+                                        if (href) {
+                                            try {
+                                                // 尝试处理相对路径
+                                                icon = new URL(href, targetUrl).toString();
+                                            } catch {
+                                                icon = href;
+                                            }
+                                        }
+                                    }
+                                }
                             });
 
                         await rewriter.transform(fetchResponse).arrayBuffer();
@@ -1301,7 +1317,8 @@ export default {
                         return createJsonResponse({
                             success: true,
                             name: title.trim().slice(0, 100),
-                            description: description.trim().slice(0, 500)
+                            description: description.trim().slice(0, 500),
+                            icon: icon
                         }, request);
                     } catch (e) {
                         return createJsonResponse({ success: false, message: `抓取失败: ${e instanceof Error ? e.message : '未知错误'}` }, request, { status: 500 });
