@@ -981,12 +981,6 @@ export default {
                     }
 
                     return createJsonResponse({ success: true, email }, request);
-                } else if (path === "auth/send-code" && method === "POST") {
-                    const idStr = path.split("/")[1];
-                    if (!idStr) {
-                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
-                    }
-                    const id = parseInt(idStr);
                 } else if (path === "sites/trash" && method === "GET") {
                     const sites = await api.getTrashSites(currentUserId);
                     return createJsonResponse(sites, request);
