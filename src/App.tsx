@@ -14,7 +14,8 @@ const VisitorHome = lazy(() => import('./components/VisitorHome'));
 const UserAvatar = lazy(() => import('./components/UserAvatar'));
 import SearchBox from './components/SearchBox';
 const AIChatPanel = lazy(() => import('./components/AIChatPanel'));
-import EditGroupDialog from './components/EditGroupDialog';
+const EditGroupDialog = React.lazy(() => import('./components/EditGroupDialog'));
+const AddGroupDialog = React.lazy(() => import('./components/AddGroupDialog')); // 新增
 import SiteSettingsModal from './components/SiteSettingsModal';
 
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
@@ -285,11 +286,6 @@ function App() {
   // 新增状态管理
   const [openAddGroup, setOpenAddGroup] = useState(false);
   const [openAddSite, setOpenAddSite] = useState(false);
-  const [newGroup, setNewGroup] = useState<Partial<Group>>({
-    name: '',
-    order_num: 0,
-    is_public: 1, // 默认为公开
-  });
   const [newSite, setNewSite] = useState<Partial<Site>>({
     name: '',
     url: '',
@@ -1350,7 +1346,7 @@ function App() {
 
   // 新增分组相关函数
   const handleOpenAddGroup = () => {
-    setNewGroup({ name: '', order_num: groups.length, is_public: 1 }); // 默认公开
+    // 移除了 setNewGroup，因为状态现在由 AddGroupDialog 内部管理
     setOpenAddGroup(true);
   };
 
@@ -1358,33 +1354,33 @@ function App() {
     setOpenAddGroup(false);
   };
 
-  const handleGroupInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewGroup({
-      ...newGroup,
-      [e.target.name]: e.target.value,
-    });
-  };
+  // handleGroupInputChange 已移除
 
-  const handleCreateGroup = async () => {
+  const handleCreateGroup = async (name: string, isPublic: number): Promise<boolean> => {
     try {
-      if (!newGroup.name) {
+      if (!name) {
         handleError('分组名称不能为空');
-        return;
+        return false;
       }
 
       // 1. 前端先行查重（忽略大小写和空格）
-      const trimmedName = newGroup.name.trim().toLowerCase();
+      const trimmedName = name.trim().toLowerCase();
       const isDuplicate = groups.some(g => g.name.trim().toLowerCase() === trimmedName);
       if (isDuplicate) {
         handleError('该分组名称已存在，请换一个名称');
-        return;
+        return false;
       }
 
-      await api.createGroup(newGroup as Group);
+      await api.createGroup({
+        name: name.trim(),
+        order_num: groups.length, // 或者把这个逻辑放在后端，或者前端计算
+        is_public: isPublic
+      } as Group);
+
       await fetchData(); // 重新加载数据
       handleCloseAddGroup();
-      setNewGroup({ name: '', order_num: 100 }); // 重置表单，order_num 默认给一个较大的值
       handleSuccess('分组创建成功');
+      return true;
     } catch (error) {
       console.error('创建分组失败:', error);
       const errorMsg = (error as Error).message;
@@ -1393,6 +1389,7 @@ function App() {
       } else {
         handleError('创建分组失败: ' + errorMsg);
       }
+      return false;
     }
   };
 
@@ -2521,83 +2518,15 @@ function App() {
           )}
 
           {/* 新增分组对话框 */}
-          <Dialog
-            open={openAddGroup}
-            onClose={handleCloseAddGroup}
-            maxWidth='md'
-            fullWidth
-            PaperProps={{
-              sx: {
-                m: { xs: 2, sm: 3, md: 4 },
-                width: { xs: 'calc(100% - 32px)', sm: '80%', md: '70%', lg: '60%' },
-                maxWidth: { sm: '600px' },
-              },
-            }}
-          >
-            <DialogTitle>
-              新增分组
-              <IconButton
-                aria-label='close'
-                onClick={handleCloseAddGroup}
-                sx={{
-                  position: 'absolute',
-                  right: 8,
-                  top: 8,
-                }}
-              >
-                <CloseIcon />
-              </IconButton>
-            </DialogTitle>
-            <DialogContent>
-              <DialogContentText sx={{ mb: 2 }}>请输入新分组的信息</DialogContentText>
-              <TextField
-                autoFocus
-                margin='dense'
-                id='group-name'
-                name='name'
-                label='分组名称'
-                type='text'
-                fullWidth
-                variant='outlined'
-                value={newGroup.name}
-                onChange={handleGroupInputChange}
-                sx={{ mb: 2 }}
+          <Suspense fallback={null}>
+            {openAddGroup && (
+              <AddGroupDialog
+                open={openAddGroup}
+                onClose={handleCloseAddGroup}
+                onSubmit={handleCreateGroup}
               />
-
-              {/* 公开/私密开关 */}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={newGroup.is_public !== 0}
-                    onChange={(e) =>
-                      setNewGroup({ ...newGroup, is_public: e.target.checked ? 1 : 0 })
-                    }
-                    color='primary'
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant='body1'>
-                      {newGroup.is_public !== 0 ? '公开分组' : '私密分组'}
-                    </Typography>
-                    <Typography variant='caption' color='text.secondary'>
-                      {newGroup.is_public !== 0
-                        ? '所有访客都可以看到此分组'
-                        : '只有管理员登录后才能看到此分组'}
-                    </Typography>
-                  </Box>
-                }
-              />
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 3 }}>
-              <Button onClick={handleCloseAddGroup} variant='outlined'>
-                取消
-              </Button>
-              <Button onClick={handleCreateGroup} variant='contained' color='primary'>
-                创建
-              </Button>
-            </DialogActions>
-          </Dialog>
+            )}
+          </Suspense>
 
           {/* 新增站点对话框 */}
           <Dialog
