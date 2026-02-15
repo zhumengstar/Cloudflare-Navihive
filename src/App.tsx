@@ -125,7 +125,6 @@ import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import WarningIcon from '@mui/icons-material/Warning';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
-import ImportExportIcon from '@mui/icons-material/ImportExport';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
 // 根据环境选择使用真实API还是模拟API
@@ -2468,9 +2467,10 @@ function App() {
                             </SortableContext>
                           ) : (
                             <Box sx={{ '& > *': { mb: 5 } }}>
-                              {groups.slice(0, visibleGroupsCount).map((group) => (
+                              {groups.slice(0, visibleGroupsCount).map((group, index) => (
                                 <GroupCard
                                   key={group.id}
+                                  index={index} // 传递索引用于动画延迟
                                   group={group}
                                   sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
                                   currentSortingGroupId={currentSortingGroupId}

@@ -115,6 +115,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   draggedSiteId,
   onBatchDelete,
   globalToggleVersion,
+  index, // 解构 index
 }) => {
   // 添加编辑弹窗的状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -176,10 +177,27 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
 
   // 响应全局切换指令
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+
     if (globalToggleVersion) {
-      setIsCollapsed(globalToggleVersion.type === 'collapse');
+      if (globalToggleVersion.type === 'expand') {
+        const delay = (index || 0) * 30;
+        timer = setTimeout(() => {
+          setIsCollapsed(false);
+        }, delay);
+      } else {
+        // 折叠时也使用延迟，避免卡顿
+        const delay = (index || 0) * 30;
+        timer = setTimeout(() => {
+          setIsCollapsed(true);
+        }, delay);
+      }
     }
-  }, [globalToggleVersion]);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [globalToggleVersion, index]);
 
   // 处理折叠切换
   const handleToggleCollapse = () => {
