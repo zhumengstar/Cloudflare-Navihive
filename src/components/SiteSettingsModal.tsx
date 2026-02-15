@@ -1,5 +1,5 @@
 // src/components/SiteSettingsModal.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Site, Group } from '../API/http';
 import { extractDomain, isSecureUrl } from '../utils/url';
 // Material UI 导入
@@ -39,15 +39,17 @@ interface SiteSettingsModalProps {
   onUpdate: (updatedSite: Site) => void;
   onDelete: (siteId: number) => void;
   onClose: () => void;
+  open: boolean;
   groups?: Group[]; // 可选的分组列表
   iconApi?: string; // 图标API配置
 }
 
-export default function SiteSettingsModal({
+const SiteSettingsModal = memo(function SiteSettingsModal({
   site,
   onUpdate,
   onDelete,
   onClose,
+  open,
   groups = [],
   iconApi = 'https://www.faviconextractor.com/favicon/{domain}?larger=true',
 }: SiteSettingsModalProps) {
@@ -68,19 +70,21 @@ export default function SiteSettingsModal({
   // 用于预览图标
   const [iconPreview, setIconPreview] = useState<string | null>(site.icon || null);
 
-  // 当外部 site 属性更新时（例如异步加载完成后），同步内部表单状态
+  // 当外部 site 属性更新时（或者弹窗打开时），同步内部表单状态
   useEffect(() => {
-    setFormData({
-      name: site.name,
-      url: site.url,
-      icon: site.icon || '',
-      description: site.description || '',
-      notes: site.notes || '',
-      group_id: String(site.group_id),
-      is_public: site.is_public ?? 1,
-    });
-    setIconPreview(site.icon || null);
-  }, [site]);
+    if (open) {
+      setFormData({
+        name: site.name,
+        url: site.url,
+        icon: site.icon || '',
+        description: site.description || '',
+        notes: site.notes || '',
+        group_id: String(site.group_id),
+        is_public: site.is_public ?? 1,
+      });
+      setIconPreview(site.icon || null);
+    }
+  }, [site, open]);
 
   // 验证错误
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -227,7 +231,7 @@ export default function SiteSettingsModal({
 
   return (
     <Dialog
-      open={true}
+      open={open}
       onClose={onClose}
       fullWidth
       maxWidth='sm'
@@ -501,4 +505,6 @@ export default function SiteSettingsModal({
       </form>
     </Dialog>
   );
-}
+});
+
+export default SiteSettingsModal;

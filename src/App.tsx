@@ -204,7 +204,10 @@ function App() {
     localStorage.setItem('theme', !darkMode ? 'dark' : 'light');
   };
 
-  const [groups, setGroups] = useState<GroupWithSites[]>([]);
+  const [groups, setGroups] = useState<GroupWithSites[]>(() => {
+    // 立即从缓存加载数据 (Early SWR)
+    return loadFromCache(CACHE_DATA_KEY) || [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>(SortMode.None);
@@ -301,6 +304,16 @@ function App() {
   const [dragStartGroupId, setDragStartGroupId] = useState<number | null>(null);
   const [groupToEdit, setGroupToEdit] = useState<Group | null>(null);
   const [siteToSettings, setSiteToSettings] = useState<Site | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // 预加载配置到状态 (Early Config SWR)
+  useEffect(() => {
+    const cachedConfigs = loadFromCache(CACHE_CONFIG_KEY);
+    if (cachedConfigs) {
+      setConfigs(prev => ({ ...prev, ...cachedConfigs }));
+      setTempConfigs(prev => ({ ...prev, ...cachedConfigs }));
+    }
+  }, []);
 
   // 菜单打开关闭
   // 检查认证状态
@@ -465,12 +478,6 @@ function App() {
 
   // 加载配置
   const fetchConfigs = async () => {
-    // 1. 先尝试从缓存加载以快速响应
-    const cachedConfigs = loadFromCache(CACHE_CONFIG_KEY);
-    if (cachedConfigs) {
-      setConfigs({ ...DEFAULT_CONFIGS, ...cachedConfigs });
-      setTempConfigs({ ...DEFAULT_CONFIGS, ...cachedConfigs });
-    }
 
     try {
       const configsData = await api.getConfigs();
@@ -491,25 +498,28 @@ function App() {
   };
 
   useEffect(() => {
-    // 立即开始初始化，但不阻塞渲染
+    // 立即开始并行初始化
     const init = async () => {
       try {
-        setLoading(true);
+        // 如果没有缓存数据，才展示 loading
+        const hasCache = !!localStorage.getItem(CACHE_DATA_KEY);
+        if (!hasCache) setLoading(true);
+
         setIsAuthChecking(true);
 
-        // 并行加载配置和初始化数据库（如果需要）
-        // 配置会立即影响 UI（标题、自定义 CSS 等）
-        const configPromise = fetchConfigs();
-        const dbPromise = api.initDB();
+        // 并行化所有初始化任务
+        await Promise.allSettled([
+          fetchConfigs(),
+          api.initDB(),
+          checkAuthStatus(),
+          fetchData()
+        ]);
 
-        await Promise.all([configPromise, dbPromise]);
-
-        // 数据库初始化和配置加载后，进行认证检查和业务数据加载
-        checkAuthStatus();
       } catch (error) {
         console.error('初始化失败:', error);
-        setLoading(false);
+      } finally {
         setIsAuthChecking(false);
+        setLoading(false);
       }
     };
     init();
@@ -595,20 +605,9 @@ function App() {
   };
 
   const fetchData = async () => {
-    // 1. 实现 SWR (Stale-While-Revalidate) 策略
-    // 访客模式下尝试从缓存加载数据
-    if (viewMode === 'readonly') {
-      const cachedData = loadFromCache(CACHE_DATA_KEY);
-      if (cachedData) {
-        setGroups(cachedData);
-        // 如果有缓存，可以暂时关闭 loading
-        setLoading(false);
-      }
-    }
-
     try {
-      // 只有在没有缓存或者非只读模式时才强制开启 loading
-      if (viewMode !== 'readonly' || !localStorage.getItem(CACHE_DATA_KEY)) {
+      // 只有在完全没有数据（缓存也没）时才展示 loading
+      if (groups.length === 0) {
         setLoading(true);
       }
       setError(null);
@@ -1554,25 +1553,9 @@ function App() {
     );
   };
 
-  // 如果正在检查认证状态，显示加载界面
-  if (isAuthChecking) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box
-          sx={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: 'background.default',
-          }}
-        >
-          <CircularProgress size={60} thickness={4} />
-        </Box>
-      </ThemeProvider>
-    );
-  }
+  // 如果正在检查认证状态，只有在没有缓存且不在访客模式时才显示全屏加载
+  // 这里我们改为不阻塞渲染，让组件根据 groups 长度自行决定是否显示骨架屏
+  // 原有的 isAuthChecking 阻断逻辑移除，改为在 background 运行
 
   // 显式显示登录界面
   if (isLoginOpen) {
@@ -1637,6 +1620,7 @@ function App() {
       const site = group.sites.find(s => s.id === siteId);
       if (site) {
         setSiteToSettings(site);
+        setIsSettingsOpen(true);
         break;
       }
     }
@@ -1877,157 +1861,134 @@ function App() {
             </Stack>
           </Box>
 
-          {!isAuthenticated ? (
+          {(!isAuthenticated && !isAuthChecking && groups.length === 0) ? (
             <Suspense fallback={<PageSkeleton />}>
               <VisitorHome
                 api={api}
-                onLoginClick={() => {
-                  console.log('VisitorHome onLoginClick triggered');
-                  setIsLoginOpen(true);
-                }}
+                onLoginClick={() => setIsLoginOpen(true)}
               />
             </Suspense>
           ) : (
-            <>
-              {/* 搜索框 - 根据配置条件渲染 */}
-              {(() => {
-                // 检查搜索框是否启用
-                const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
-                if (!searchBoxEnabled) {
-                  return null;
-                }
-
-                // 如果是访客模式，检查访客是否可用搜索框
-                if (viewMode === 'readonly') {
-                  const guestEnabled = configs['site.searchBoxGuestEnabled'] === 'true';
-                  if (!guestEnabled) {
-                    return null;
-                  }
-                }
-
-                return (
-                  <Box sx={{ mb: 4 }}>
-                    <SearchBox
-                      groups={groups}
-                      sites={groups.flatMap((g) => g.sites || [])}
-                      onDelete={isAuthenticated ? handleSiteDelete : undefined}
-                      onEditGroup={(id) => {
-                        const group = groups.find(g => g.id === id);
-                        if (group) setGroupToEdit(group);
-                      }}
-                      onMoveSite={(siteId) => {
-                        handleSiteSettingsOpen(siteId);
-                      }}
-                      onInternalResultClick={(result: SearchResultItem) => {
-                        // 可选：滚动到对应的元素
-                        if (result.type === 'group') {
-                          const groupElement = document.getElementById(`group-${result.id}`);
-                          groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        } else if (result.type === 'site' && result.groupId) {
-                          const groupElement = document.getElementById(`group-${result.groupId}`);
-                          groupElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }}
-                    />
-                  </Box>
-                );
-              })()}
-
-              {loading && groups.length === 0 && (
-                <PageSkeleton />
+            <Box>
+              {/* 同时显示访客主页（如果在检查中且无数据）和内容（如果有数据） */}
+              {!isAuthenticated && !isAuthChecking && groups.length === 0 && (
+                <Suspense fallback={<PageSkeleton />}>
+                  <VisitorHome
+                    api={api}
+                    onLoginClick={() => setIsLoginOpen(true)}
+                  />
+                </Suspense>
               )}
 
-              {!loading && !error && (
-                <Fade in={!loading} timeout={800}>
-                  <Box
-                    sx={{
-                      '& > *': { mb: 5 },
-                      minHeight: '100px',
-                    }}
-                  >
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragStart={handleDragStart}
-                      onDragEnd={sortMode === SortMode.CrossGroupDrag ? handleCrossGroupDragEnd : handleDragEnd}
-                      onDragOver={handleSiteDragOver}
-                    >
-                      {sortMode === SortMode.GroupSort ? (
-                        <SortableContext
-                          items={groups.map((group) => `group-${group.id}`)}
-                          strategy={verticalListSortingStrategy}
+              {(groups.length > 0 || isAuthenticated || isAuthChecking) && (
+                <Box>
+                  {/* 搜索框 ... */}
+                  {(() => {
+                    const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
+                    if (!searchBoxEnabled) return null;
+                    if (viewMode === 'readonly' && configs['site.searchBoxGuestEnabled'] !== 'true') return null;
+
+                    return (
+                      <Box sx={{ mb: 4 }}>
+                        <SearchBox
+                          groups={groups}
+                          sites={groups.flatMap((g) => g.sites || [])}
+                          onDelete={isAuthenticated ? handleSiteDelete : undefined}
+                          onEditGroup={(id) => {
+                            const group = groups.find(g => g.id === id);
+                            if (group) setGroupToEdit(group);
+                          }}
+                          onMoveSite={(siteId) => handleSiteSettingsOpen(siteId)}
+                          onInternalResultClick={(result: SearchResultItem) => {
+                            if (result.type === 'group' || (result.type === 'site' && result.groupId)) {
+                              const targetId = result.type === 'group' ? result.id : result.groupId!;
+                              const element = document.getElementById(`group-${targetId}`);
+                              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                          }}
+                        />
+                      </Box>
+                    );
+                  })()}
+
+                  {loading && groups.length === 0 && <PageSkeleton />}
+
+                  {!loading && !error && (
+                    <Fade in={!loading} timeout={800}>
+                      <Box sx={{ '& > *': { mb: 5 }, minHeight: '100px' }}>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragStart={handleDragStart}
+                          onDragEnd={sortMode === SortMode.CrossGroupDrag ? handleCrossGroupDragEnd : handleDragEnd}
+                          onDragOver={handleSiteDragOver}
                         >
-                          <Stack spacing={2}>
-                            {groups.map((group) => (
-                              <SortableGroupItem key={group.id} id={`group-${group.id}`} group={group} />
-                            ))}
-                          </Stack>
-                        </SortableContext>
-                      ) : (
-                        <Box sx={{ '& > *': { mb: 5 } }}>
-                          {groups.slice(0, visibleGroupsCount).map((group) => (
-                            <GroupCard
-                              key={group.id}
-                              group={group}
-                              sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
-                              currentSortingGroupId={currentSortingGroupId}
-                              viewMode={viewMode}
-                              onUpdate={handleSiteUpdate}
-                              onDelete={handleSiteDelete}
-                              onStartSiteSort={startSiteSort}
-                              onAddSite={handleOpenAddSite}
-                              onUpdateGroup={handleGroupUpdate}
-                              onDeleteGroup={handleGroupDelete}
-                              onBatchDelete={handleBatchDeleteSites}
-                              onSiteClick={handleSiteClick}
-                              onSettingsOpen={handleSiteSettingsOpen}
-                              configs={configs}
-                              draggedSiteId={draggedSiteId}
-                            />
-                          ))}
-                          {groups.length > visibleGroupsCount && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                              <CircularProgress size={24} />
+                          {sortMode === SortMode.GroupSort ? (
+                            <SortableContext
+                              items={groups.map((group) => `group-${group.id}`)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              <Stack spacing={2}>
+                                {groups.map((group) => (
+                                  <SortableGroupItem key={group.id} id={`group-${group.id}`} group={group} />
+                                ))}
+                              </Stack>
+                            </SortableContext>
+                          ) : (
+                            <Box sx={{ '& > *': { mb: 5 } }}>
+                              {groups.slice(0, visibleGroupsCount).map((group) => (
+                                <GroupCard
+                                  key={group.id}
+                                  group={group}
+                                  sortMode={sortMode === SortMode.None ? 'None' : sortMode === SortMode.CrossGroupDrag ? 'CrossGroupDrag' : 'SiteSort'}
+                                  currentSortingGroupId={currentSortingGroupId}
+                                  viewMode={viewMode}
+                                  onUpdate={handleSiteUpdate}
+                                  onDelete={handleSiteDelete}
+                                  onStartSiteSort={startSiteSort}
+                                  onAddSite={handleOpenAddSite}
+                                  onUpdateGroup={handleGroupUpdate}
+                                  onDeleteGroup={handleGroupDelete}
+                                  onBatchDelete={handleBatchDeleteSites}
+                                  onSiteClick={handleSiteClick}
+                                  onSettingsOpen={handleSiteSettingsOpen}
+                                  configs={configs}
+                                  draggedSiteId={draggedSiteId}
+                                />
+                              ))}
+                              {groups.length > visibleGroupsCount && (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                                  <CircularProgress size={24} />
+                                </Box>
+                              )}
                             </Box>
                           )}
-                        </Box>
-                      )}
 
-                      <DragOverlay dropAnimation={{
-                        duration: 200,
-                        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-                      }}>
-                        {activeSite ? (
-                          <Box
-                            sx={{
-                              width: {
-                                xs: 200,
-                                sm: 220,
-                                md: 250,
-                                lg: 280,
-                                xl: 300,
-                              },
-                              padding: 1,
-                            }}
-                          >
-                            <SiteCard
-                              site={activeSite}
-                              onUpdate={() => { }}
-                              onDelete={() => { }}
-                              onSiteClick={() => { }}
-                              isEditMode={true}
-                              viewMode={viewMode}
-                              iconApi={configs['site.iconApi']}
-                            />
-                          </Box>
-                        ) : null}
-                      </DragOverlay>
-                    </DndContext>
-                  </Box>
-                </Fade>
+                          <DragOverlay dropAnimation={{
+                            duration: 200,
+                            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                          }}>
+                            {activeSite ? (
+                              <Box sx={{ width: { xs: 200, sm: 220, md: 250, lg: 280, xl: 300 }, padding: 1 }}>
+                                <SiteCard
+                                  site={activeSite}
+                                  onUpdate={() => { }}
+                                  onDelete={() => { }}
+                                  onSiteClick={() => { }}
+                                  isEditMode={true}
+                                  viewMode={viewMode}
+                                  iconApi={configs['site.iconApi']}
+                                />
+                              </Box>
+                            ) : null}
+                          </DragOverlay>
+                        </DndContext>
+                      </Box>
+                    </Fade>
+                  )}
+                </Box>
               )}
-
-            </>
+            </Box>
           )}
 
           {/* 新增分组对话框 */}
@@ -2546,138 +2507,129 @@ function App() {
             </DialogActions>
           </Dialog>
 
-
         </Container>
         <ScrollTop>
           <Fab size="large" aria-label="scroll back to top" color="primary">
             <KeyboardArrowUpIcon fontSize="large" />
           </Fab>
         </ScrollTop>
-      </Box>
+      </Box >
+
       {/* AI 智能问答悬浮窗 */}
-      {isAuthenticated && (
-        <Suspense fallback={null}>
-          <AIChatPanel
-            api={api}
-            username={username}
-            groups={groups}
-            onAddSite={async (site) => {
-              // 1. 构造初始占位数据
-              const targetGroup = groups.find(g => g.id === site.groupId);
-              const orderNum = targetGroup ? targetGroup.sites.length : 0;
-              const placeholderName = site.name || site.title || new URL(site.url).hostname;
+      {
+        isAuthenticated && (
+          <Suspense fallback={null}>
+            <AIChatPanel
+              api={api}
+              username={username}
+              groups={groups}
+              onAddSite={async (site) => {
+                const targetGroup = groups.find(g => g.id === site.groupId);
+                const orderNum = targetGroup ? targetGroup.sites.length : 0;
+                const placeholderName = site.name || site.title || new URL(site.url).hostname;
+                const initialSiteData = {
+                  group_id: site.groupId,
+                  name: placeholderName,
+                  url: site.url,
+                  order_num: orderNum,
+                  is_public: 1,
+                  icon: '',
+                  description: '',
+                  notes: ''
+                };
 
-              const initialSiteData = {
-                group_id: site.groupId,
-                name: placeholderName,
-                url: site.url,
-                order_num: orderNum,
-                is_public: 1,
-                icon: '',
-                description: '',
-                notes: ''
-              };
+                const tempId = Date.now() * -1;
+                setGroups(prevGroups => prevGroups.map(group => {
+                  if (group.id === site.groupId) {
+                    return {
+                      ...group,
+                      sites: [...group.sites, { ...initialSiteData, id: tempId } as any]
+                    };
+                  }
+                  return group;
+                }));
+                handleSuccess(`已开始添加 URL: ${site.url}`);
 
-              // 2. 乐观更新 UI - 立即占据空位
-              const tempId = Date.now() * -1;
-              const optimisticallyUpdatedGroups = groups.map(group => {
-                if (group.id === site.groupId) {
-                  return {
-                    ...group,
-                    sites: [...group.sites, { ...initialSiteData, id: tempId } as any]
-                  };
-                }
-                return group;
-              });
-              setGroups(optimisticallyUpdatedGroups);
-              handleSuccess(`已开始添加 URL: ${site.url}`);
-
-              // 3. 后台执行创建与异步信息补齐
-              (async () => {
-                try {
-                  const createdSite = await api.createSite(initialSiteData);
-                  if (createdSite && createdSite.id) {
-                    // 更新本地状态：将临时 ID 替换为真实 ID
-                    setGroups(prevGroups => prevGroups.map(group => {
-                      if (group.id === site.groupId) {
-                        return {
-                          ...group,
-                          sites: group.sites.map(s => s.id === tempId ? { ...s, id: createdSite.id } : s)
-                        };
-                      }
-                      return group;
-                    }));
-
-                    // 获取真实元信息
-                    const info = await api.fetchSiteInfo(site.url) as any;
-                    if (info.success && (info.name || info.description || info.icon)) {
-                      const updatedFields = {
-                        name: info.name || placeholderName,
-                        description: info.description || '',
-                        icon: info.icon || ''
-                      };
-
-                      await api.updateSite(createdSite.id, updatedFields);
-
-                      // 局部刷新：仅更新该站点的信息
+                (async () => {
+                  try {
+                    const createdSite = await api.createSite(initialSiteData);
+                    if (createdSite && createdSite.id) {
                       setGroups(prevGroups => prevGroups.map(group => {
                         if (group.id === site.groupId) {
                           return {
                             ...group,
-                            sites: group.sites.map(s => s.id === createdSite.id ? { ...s, ...updatedFields } : s)
+                            sites: group.sites.map(s => s.id === tempId ? { ...s, id: createdSite.id } : s)
                           };
                         }
                         return group;
                       }));
-                    }
-                  }
-                } catch (error) {
-                  console.error('Two-stage bookmarking failed:', error);
-                  handleError('后台数据同步失败');
-                }
-              })();
 
-              return true;
-            }}
-          />
-        </Suspense>
-      )}
+                      const info = await api.fetchSiteInfo(site.url) as any;
+                      if (info.success) {
+                        const updatedFields = {
+                          name: info.name || placeholderName,
+                          description: info.description || '',
+                          icon: info.icon || ''
+                        };
+                        await api.updateSite(createdSite.id, updatedFields);
+                        setGroups(prevGroups => prevGroups.map(group => {
+                          if (group.id === site.groupId) {
+                            return {
+                              ...group,
+                              sites: group.sites.map(s => s.id === createdSite.id ? { ...s, ...updatedFields } : s)
+                            };
+                          }
+                          return group;
+                        }));
+                      }
+                    }
+                  } catch (error) {
+                    console.error('AI Chat bookmarking failed:', error);
+                    handleError('后台数据同步失败');
+                  }
+                })();
+                return true;
+              }}
+            />
+          </Suspense>
+        )
+      }
 
       {/* 搜索结果触发的分组编辑对话框 */}
-      {groupToEdit && (
-        <EditGroupDialog
-          open={!!groupToEdit}
-          group={groupToEdit}
-          onClose={() => setGroupToEdit(null)}
-          onSave={(updated) => {
-            handleGroupUpdate(updated);
-            setGroupToEdit(null);
-          }}
-          onDelete={(id) => {
-            handleGroupDelete(id);
-            setGroupToEdit(null);
-          }}
-        />
-      )}
+      {
+        groupToEdit && (
+          <EditGroupDialog
+            open={!!groupToEdit}
+            group={groupToEdit}
+            onClose={() => setGroupToEdit(null)}
+            onSave={(updated) => {
+              handleGroupUpdate(updated);
+              setGroupToEdit(null);
+            }}
+            onDelete={(id) => {
+              handleGroupDelete(id);
+              setGroupToEdit(null);
+            }}
+          />
+        )
+      }
 
-      {/* 站点设置对话框 */}
-      {siteToSettings && (
-        <SiteSettingsModal
-          site={siteToSettings}
-          onUpdate={(updated) => {
-            handleSiteUpdate(updated);
-            setSiteToSettings(null);
-          }}
-          onDelete={(id) => {
-            handleSiteDelete(id);
-            setSiteToSettings(null);
-          }}
-          onClose={() => setSiteToSettings(null)}
-          groups={groups}
-          iconApi={configs['site.iconApi']}
-        />
-      )}
-    </ThemeProvider>
+      <SiteSettingsModal
+        site={siteToSettings || { id: 0, name: '', url: '', group_id: 0, order_num: 0, is_public: 1, icon: '', description: '', notes: '' }}
+        open={isSettingsOpen}
+        onUpdate={(updated) => {
+          handleSiteUpdate(updated);
+          setIsSettingsOpen(false);
+        }}
+        onDelete={(id) => {
+          handleSiteDelete(id);
+          setIsSettingsOpen(false);
+        }}
+        onClose={() => setIsSettingsOpen(false)}
+        groups={groups}
+        iconApi={configs['site.iconApi']}
+      />
+    </ThemeProvider >
   );
 }
 
