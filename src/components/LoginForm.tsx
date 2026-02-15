@@ -58,6 +58,25 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState(''); // 新增验证码状态
+
+  // 自动填充上次登录的账号密码
+  React.useEffect(() => {
+    try {
+      const savedCredentials = localStorage.getItem('saved_credentials');
+      if (savedCredentials && mode === 'login') {
+        const decoded = atob(savedCredentials);
+        const [savedUser, savedPass] = decoded.split(':');
+        if (savedUser && savedPass) {
+          setUsername(savedUser);
+          setPassword(savedPass);
+        }
+      }
+    } catch (e) {
+      console.error('读取保存的凭据失败:', e);
+      localStorage.removeItem('saved_credentials');
+    }
+  }, [mode]);
+
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);

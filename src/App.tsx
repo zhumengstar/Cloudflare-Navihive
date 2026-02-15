@@ -381,6 +381,18 @@ function App() {
         setIsLoginOpen(false);
         setLoginLoading(false);
 
+        // 如果勾选了“记住我”，保存加密后的账号密码
+        if (rememberMe) {
+          try {
+            const credentials = btoa(`${username}:${password}`);
+            localStorage.setItem('saved_credentials', credentials);
+          } catch (e) {
+            console.error('保存凭据失败:', e);
+          }
+        } else {
+          localStorage.removeItem('saved_credentials');
+        }
+
         // 单独加载数据，失败不影响登录成功状态
         try {
           await fetchData();

@@ -402,7 +402,21 @@ export class NavigationAPI {
     return null;
   }
 
-  // ... (updateUserProfile omitted)
+  // 更新用户信息
+  async updateUserProfile(userId: number, data: { email?: string }): Promise<{ success: boolean; message?: string }> {
+    try {
+      if (data.email) {
+        await this.db
+          .prepare('UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .bind(data.email, userId)
+          .run();
+      }
+      return { success: true, message: '用户信息更新成功' };
+    } catch (error) {
+      console.error('更新用户信息失败:', error);
+      return { success: false, message: '更新用户信息失败' };
+    }
+  }
 
   // 注册新用户
   async register(request: RegisterRequest): Promise<RegisterResponse> {
