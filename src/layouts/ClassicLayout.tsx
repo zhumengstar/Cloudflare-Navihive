@@ -1,13 +1,10 @@
-import React, { Suspense } from 'react';
+import React from 'react';
 import {
     Box,
     Typography,
     Container,
-    Stack,
     Fab,
-    CircularProgress,
-    useTheme,
-    Button
+    Theme,
 } from '@mui/material';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { isSecureUrl } from '../utils/url';
@@ -56,7 +53,6 @@ interface Props {
 }
 
 const ClassicLayout: React.FC<Props> = ({ children, headerContent, title, configs }) => {
-    const theme = useTheme();
 
     return (
         <Box
@@ -93,7 +89,7 @@ const ClassicLayout: React.FC<Props> = ({ children, headerContent, title, config
                                 left: 0,
                                 right: 0,
                                 bottom: 0,
-                                backgroundColor: (theme) =>
+                                backgroundColor: (theme: Theme) =>
                                     theme.palette.mode === 'dark'
                                         ? 'rgba(0, 0, 0, ' + (1 - Number(configs['site.backgroundOpacity'])) + ')'
                                         : 'rgba(255, 255, 255, ' +
