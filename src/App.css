@@ -62,7 +62,7 @@
   button,
   [role='button'],
   a {
-    padding: 6px 12px !important;
+    padding: 6px 12px;
     min-height: 36px;
   }
 

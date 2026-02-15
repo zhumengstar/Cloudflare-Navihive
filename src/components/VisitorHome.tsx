@@ -167,12 +167,13 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
                                                     src={getIconUrl(item.site.icon)}
                                                     alt={item.site.name}
                                                     variant="rounded"
-                                                    sx={{ width: 40, height: 40, mr: 1.5 }}
+                                                    sx={{ width: 40, height: 40, mr: 1.5, flexShrink: 0 }}
+                                                    imgProps={{ style: { objectFit: 'cover' } }}
                                                 />
                                             ) : (
                                                 <Avatar
                                                     variant="rounded"
-                                                    sx={{ width: 40, height: 40, mr: 1.5, bgcolor: 'primary.light' }}
+                                                    sx={{ width: 40, height: 40, mr: 1.5, bgcolor: 'primary.light', flexShrink: 0 }}
                                                 >
                                                     <LanguageIcon />
                                                 </Avatar>

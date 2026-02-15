@@ -252,7 +252,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 aria-controls={menuOpen ? 'user-menu' : undefined}
                 aria-haspopup='true'
                 aria-expanded={menuOpen ? 'true' : undefined}
-                sx={{ p: 0 }}
+                sx={{ p: 0, flexShrink: 0 }}
             >
                 <Avatar
                     sx={{
@@ -263,6 +263,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         fontWeight: 'bold',
                         cursor: 'pointer',
                         transition: 'box-shadow 0.2s',
+                        flexShrink: 0,
                         '&:hover': {
                             boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.3)',
                         },
@@ -414,6 +415,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 fontSize: '2rem',
                                 fontWeight: 'bold',
                                 mb: 1.5,
+                                flexShrink: 0,
                             }}
                         >
                             {infoLoading ? <CircularProgress size={40} /> : getAvatarLetter()}
