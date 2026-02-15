@@ -571,6 +571,29 @@ export class MockNavigationClient {
     };
   }
 
+  // 清空所有数据 (模拟)
+  async clearAllData(): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    mockGroups.length = 0;
+    mockSites.length = 0;
+
+    // 模拟后端重新创建一个默认分组
+    const defaultGroup = {
+      id: 1,
+      name: '常用工具',
+      order_num: 1,
+      is_public: 1,
+      user_id: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockGroups.push(defaultGroup);
+
+    saveGroupsToStorage();
+    saveSitesToStorage();
+    return true;
+  }
+
   // 数据导入
   async importData(data: ExportData): Promise<ImportResult> {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -758,5 +781,10 @@ export class MockNavigationClient {
       name: '模拟站点名称',
       description: '这是一个模拟的站点描述，用于开发环境调试。',
     };
+  }
+
+  async batchUpdateIcons(): Promise<{ success: boolean; count: number }> {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return { success: true, count: mockSites.length };
   }
 }

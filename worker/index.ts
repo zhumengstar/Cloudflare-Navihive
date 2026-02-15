@@ -163,7 +163,9 @@ async function validateRequestBody(request: Request): Promise<unknown> {
     }
 
     // 读取并验证实际大小
-    const bodyText = await request.text();
+    // 使用 clone() 以便原始请求仍可被其他逻辑（如果需要）读取
+    const clonedRequest = request.clone();
+    const bodyText = await clonedRequest.text();
 
     if (bodyText.length > MAX_BODY_SIZE) {
         throw new Error('请求体过大，最大允许 1MB');
@@ -305,13 +307,16 @@ function createJsonResponse(
     options: ResponseInit = {}
 ): Response {
     const corsHeaders = getCorsHeaders(request);
+    const headers = new Headers(options.headers);
+
+    // 合并 CORS 头
+    for (const [key, value] of Object.entries(corsHeaders)) {
+        headers.set(key, value);
+    }
 
     return Response.json(data, {
         ...options,
-        headers: {
-            ...corsHeaders,
-            ...(options.headers as Record<string, string>),
-        },
+        headers
     });
 }
 
@@ -324,13 +329,16 @@ function createResponse(
     options: ResponseInit = {}
 ): Response {
     const corsHeaders = getCorsHeaders(request);
+    const headers = new Headers(options.headers);
+
+    // 合并 CORS 头
+    for (const [key, value] of Object.entries(corsHeaders)) {
+        headers.set(key, value);
+    }
 
     return new Response(body, {
         ...options,
-        headers: {
-            ...corsHeaders,
-            ...(options.headers as Record<string, string>),
-        },
+        headers
     });
 }
 
@@ -1240,6 +1248,9 @@ export default {
                     const value = await api.getConfig(key);
                     return createJsonResponse({ key, value }, request);
                 } else if (path.startsWith("configs/") && method === "PUT") {
+                    if (!isAuthenticated || (currentUserId !== 1)) {
+                        return createJsonResponse({ success: false, message: "只有管理员有权修改配置" }, request, { status: 403 });
+                    }
                     const key = path.substring("configs/".length);
                     const data = (await validateRequestBody(request)) as ConfigInput;
 
@@ -1305,8 +1316,18 @@ export default {
                         );
                     }
 
-                    const result = await api.importData(data as ExportData);
+                    const result = await api.importData(data as ExportData, currentUserId);
                     return createJsonResponse(result, request);
+                }
+
+                // 清空所有数据路由
+                else if (path === "clear-all" && method === "DELETE") {
+                    if (!isAuthenticated) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+
+                    const success = await api.clearAllData();
+                    return createJsonResponse({ success }, request);
                 }
                 // 获取站点信息 (标题和描述)
                 else if (path === "utils/fetch-site-info" && method === "GET") {
@@ -1321,10 +1342,12 @@ export default {
 
                     try {
                         let fetchResponse;
+                        console.log(`[Fetch Info] Attempting to fetch: ${targetUrl}`);
                         try {
                             fetchResponse = await fetch(targetUrl, {
                                 headers: {
-                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+                                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
                                     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
                                 },
                                 redirect: "follow",
@@ -1406,7 +1429,14 @@ export default {
                     } catch (e) {
                         return createJsonResponse({ success: false, message: `抓取失败: ${e instanceof Error ? e.message : '未知错误'}` }, request, { status: 500 });
                     }
+                } else if (path === "utils/batch-update-icons" && method === "POST") {
+                    if (!isAuthenticated || (currentUserId !== 1)) {
+                        return createJsonResponse({ success: false, message: "只有管理员可以执行此操作" }, request, { status: 403 });
+                    }
+                    const result = await api.batchUpdateIcons();
+                    return createJsonResponse(result, request);
                 }
+
 
                 // AI 智能问答路由
                 else if (path === "chat" && method === "POST") {
@@ -1522,14 +1552,17 @@ ${bookmarkContext ? `以下是用户保存的书签数据：\n${bookmarkContext}
                     }
                 }
 
-                // 默认返回404
+                // --- 兜底逻辑 ---
+                // 如果没有任何 if 分支被触发且逻辑运行到了这里
                 return createResponse("API路径不存在", request, { status: 404 });
+
             } catch (error) {
+                // 全局错误捕获，确保即使 API 处理出错也返回 Response
                 return createErrorResponse(error, request, 'API 请求');
             }
         }
 
-        // 非API路由默认返回404
+        // 非API路由默认返回404，确保始终生成 Response
         return createResponse("Not Found", request, { status: 404 });
     },
 } satisfies ExportedHandler;

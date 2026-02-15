@@ -96,6 +96,7 @@ interface GroupCardProps {
   onBatchDelete?: (siteIds: number[]) => void; // 新增：批量删除回调
   onSiteClick?: (siteId: number) => void; // 新增：站点点击回调
   onSettingsOpen?: (siteId: number) => Promise<void> | void; // 新增：打开设置回调
+  globalToggleVersion?: { type: 'expand' | 'collapse'; ts: number }; // 新增：全局切换指令
 }
 
 const GroupCard: React.FC<GroupCardProps> = React.memo(({
@@ -113,6 +114,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   configs,
   draggedSiteId,
   onBatchDelete,
+  globalToggleVersion,
 }) => {
   // 添加编辑弹窗的状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -171,6 +173,13 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
       localStorage.setItem(`group-collapse-v2-${group.id}`, JSON.stringify(isCollapsed));
     }
   }, [isCollapsed, group.id]);
+
+  // 响应全局切换指令
+  useEffect(() => {
+    if (globalToggleVersion) {
+      setIsCollapsed(globalToggleVersion.type === 'collapse');
+    }
+  }, [globalToggleVersion]);
 
   // 处理折叠切换
   const handleToggleCollapse = () => {

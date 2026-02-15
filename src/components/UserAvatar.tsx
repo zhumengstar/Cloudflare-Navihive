@@ -54,6 +54,7 @@ interface UserAvatarProps {
     onOpenAddGroup: () => void;
     configs: Record<string, string>;
     onUpdateConfigs: (newConfigs: Record<string, string>) => Promise<void>;
+    isAdmin?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
 }
@@ -71,6 +72,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     onOpenAddGroup,
     configs,
     onUpdateConfigs,
+    isAdmin,
     api
 }) => {
     const theme = useTheme();
@@ -344,44 +346,48 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         <ListItemText>修改密码</ListItemText>
                     </MenuItem>
                 )}
-                <Divider />
-                <MenuItem onClick={() => { handleMenuClose(); onOpenAddGroup(); }}>
-                    <ListItemIcon>
-                        <CreateNewFolderIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>新增分组</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }}>
-                    <ListItemIcon>
-                        <SortIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>分组排序</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }}>
-                    <ListItemIcon>
-                        <SwapHorizIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>书签拖动</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }}>
-                    <ListItemIcon>
-                        <SettingsIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>网站设置</ListItemText>
-                </MenuItem>
-                <Divider />
-                <MenuItem onClick={() => { handleMenuClose(); onExportData(); }}>
-                    <ListItemIcon>
-                        <FileDownloadIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>导出数据</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { handleMenuClose(); onOpenImport(); }}>
-                    <ListItemIcon>
-                        <FileUploadIcon fontSize='small' />
-                    </ListItemIcon>
-                    <ListItemText>导入数据</ListItemText>
-                </MenuItem>
+                {isAdmin && (
+                    <>
+                        <Divider />
+                        <MenuItem onClick={() => { handleMenuClose(); onOpenAddGroup(); }}>
+                            <ListItemIcon>
+                                <CreateNewFolderIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>新增分组</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }}>
+                            <ListItemIcon>
+                                <SortIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>分组排序</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }}>
+                            <ListItemIcon>
+                                <SwapHorizIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>书签拖动</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }}>
+                            <ListItemIcon>
+                                <SettingsIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>网站设置</ListItemText>
+                        </MenuItem>
+                        <Divider />
+                        <MenuItem onClick={() => { handleMenuClose(); onExportData(); }}>
+                            <ListItemIcon>
+                                <FileDownloadIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>导出数据</ListItemText>
+                        </MenuItem>
+                        <MenuItem onClick={() => { handleMenuClose(); onOpenImport(); }}>
+                            <ListItemIcon>
+                                <FileUploadIcon fontSize='small' />
+                            </ListItemIcon>
+                            <ListItemText>导入数据</ListItemText>
+                        </MenuItem>
+                    </>
+                )}
                 <Divider />
                 <MenuItem onClick={handleLogoutClick} sx={{ color: 'error.main' }}>
                     <ListItemIcon sx={{ color: 'error.main' }}>

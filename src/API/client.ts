@@ -399,6 +399,14 @@ export class NavigationClient {
     return response;
   }
 
+  // 清空所有数据
+  async clearAllData(): Promise<boolean> {
+    const response = await this.request('clear-all', {
+      method: 'DELETE',
+    });
+    return response.success;
+  }
+
   // AI 智能问答 (流式)
   async chatStream(
     message: string,
@@ -486,5 +494,12 @@ export class NavigationClient {
         deadLink: true, // 网络层面的错误通常意味着不可达
       };
     }
+  }
+
+  async batchUpdateIcons(): Promise<{ success: boolean; count: number }> {
+    const response = await this.request('utils/batch-update-icons', {
+      method: 'POST',
+    });
+    return response;
   }
 }

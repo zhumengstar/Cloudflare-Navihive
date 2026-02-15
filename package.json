@@ -27,6 +27,7 @@
         "@emotion/styled": "^11.14.0",
         "@fontsource/roboto": "^5.2.5",
         "@mui/icons-material": "^7.0.1",
+        "@mui/lab": "7.0.1-beta.22",
         "@mui/material": "^7.0.1",
         "@tailwindcss/vite": "^4.1.2",
         "bcrypt-edge": "^0.1.1",

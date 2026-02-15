@@ -301,6 +301,7 @@ export class NavigationAPI {
         }
 
         await this.setConfig('DATA_INITIALIZED', 'true');
+        await this.setConfig('site.iconApi', 'https://www.faviconextractor.com/favicon/{domain}');
         console.log('Default data initialized.');
       }
     } catch (e) {
@@ -760,11 +761,19 @@ export class NavigationAPI {
 
   async createGroup(group: Group, userId?: number): Promise<Group> {
     const finalUserId = userId || 1; // 默认为 admin
+
+    // 1. 尝试查找同名分组（忽略大小写和首尾空格）
+    const existingGroup = await this.getGroupByName(group.name, finalUserId);
+    if (existingGroup) {
+      throw new Error('分组名称已存在');
+    }
+
+    // 2. 如果不存在，则创建
     const result = await this.db
       .prepare(
         'INSERT INTO groups (name, order_num, is_public, user_id) VALUES (?, ?, ?, ?) RETURNING id, name, order_num, is_public, user_id, created_at, updated_at'
       )
-      .bind(group.name, group.order_num, group.is_public ?? 1, finalUserId)
+      .bind(group.name.trim(), group.order_num, group.is_public ?? 1, finalUserId)
       .all<Group>();
     if (!result.results || result.results.length === 0) {
       throw new Error('创建分组失败');
@@ -1019,6 +1028,24 @@ export class NavigationAPI {
   }
 
   async createSite(site: Site): Promise<Site> {
+    // 1. 规范化 URL（小写化域名部分，移除末尾斜杠）
+    const trimmedUrl = site.url.trim();
+    const normalizedUrl = trimmedUrl.replace(/\/+$/, '');
+
+    // 2. 局部查重：检查该分组下是否已存在该 URL
+    const existingSite = await this.getSiteByGroupIdAndUrl(site.group_id, trimmedUrl);
+    if (existingSite) {
+      return existingSite;
+    }
+
+    // 3. 规范化后再次检查 (针对末尾斜杠差异)
+    if (normalizedUrl !== trimmedUrl) {
+      const existingNormalizedSite = await this.getSiteByGroupIdAndUrl(site.group_id, normalizedUrl);
+      if (existingNormalizedSite) {
+        return existingNormalizedSite;
+      }
+    }
+
     const result = await this.db
       .prepare(
         `
@@ -1314,7 +1341,7 @@ export class NavigationAPI {
   }
 
   // 导入所有数据
-  async importData(data: ExportData): Promise<ImportResult> {
+  async importData(data: ExportData, userId: number = 1): Promise<ImportResult> {
     try {
       // 创建新旧分组ID的映射
       const groupMap = new Map<number, number>();
@@ -1337,7 +1364,7 @@ export class NavigationAPI {
       // 导入分组数据
       for (const group of data.groups) {
         // 检查是否已存在同名分组
-        const existingGroup = await this.getGroupByName(group.name);
+        const existingGroup = await this.getGroupByName(group.name, userId);
 
         if (existingGroup) {
           // 如果存在同名分组，使用现有分组ID
@@ -1356,7 +1383,7 @@ export class NavigationAPI {
           const newGroup = await this.createGroup({
             name: group.name,
             order_num: group.order_num,
-          });
+          }, userId);
 
           // 添加到映射
           if (group.id && newGroup.id) {
@@ -1428,23 +1455,95 @@ export class NavigationAPI {
   }
 
   // 根据名称查询分组
-  async getGroupByName(name: string): Promise<Group | null> {
+  // 根据名称查询分组 (不区分大小写，且忽略首尾空格)
+  async getGroupByName(name: string, userId: number = 1): Promise<Group | null> {
     const result = await this.db
-      .prepare('SELECT id, name, order_num, created_at, updated_at FROM groups WHERE name = ?')
-      .bind(name)
+      .prepare('SELECT id, name, order_num, created_at, updated_at FROM groups WHERE (user_id = ? OR user_id IS NULL) AND TRIM(LOWER(name)) = TRIM(LOWER(?))')
+      .bind(userId, name)
       .first<Group>();
     return result;
   }
 
   // 查询特定分组下是否已存在指定URL的站点
   async getSiteByGroupIdAndUrl(groupId: number, url: string): Promise<Site | null> {
+    const trimmedUrl = url.trim();
+    const normalizedUrl = trimmedUrl.replace(/\/+$/, '');
+
     const result = await this.db
       .prepare(
-        'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites WHERE group_id = ? AND url = ?'
+        'SELECT id, group_id, name, url, icon, description, notes, order_num, created_at, updated_at FROM sites WHERE group_id = ? AND (url = ? OR url = ? OR url = ? OR url = ?)'
       )
-      .bind(groupId, url)
+      .bind(groupId, trimmedUrl, normalizedUrl, normalizedUrl + '/', trimmedUrl + '/')
       .first<Site>();
     return result;
+  }
+
+  /**
+   * 清空所有数据 (分组和站点)
+   * 利用外键级联删除 (ON DELETE CASCADE)
+   */
+  async clearAllData(): Promise<boolean> {
+    try {
+      // 1. 删除所有分组 (会触发表定义中的 ON DELETE CASCADE 级联删除 sites)
+      await this.db.prepare('DELETE FROM groups').run();
+
+      // 2. 也是为了确保 ID 计数器重置（可选，但推荐）
+      // 注意：D1 不支持 TRUNCATE，通常 DELETE 后会自动处理，或者可以执行：
+      // await this.db.prepare("DELETE FROM sqlite_sequence WHERE name='groups' OR name='sites'").run();
+
+      // 3. 重新插入默认数据，防止页面完全空白
+      // 这里我们复用 initDB 的逻辑部分，或者手动插入一个
+      await this.db.prepare(
+        "INSERT INTO groups (name, order_num, is_public, user_id) VALUES ('常用工具', 1, 1, 1)"
+      ).run();
+
+      return true;
+    } catch (error) {
+      console.error('清空数据失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 批量更新所有站点的图标为统一 API 格式
+   * 格式: https://www.faviconextractor.com/favicon/{domain}
+   */
+  async batchUpdateIcons(): Promise<{ success: boolean; count: number }> {
+    try {
+      // 1. 获取所有站点
+      const sites = await this.getSites();
+      let updatedCount = 0;
+
+      // 提取域名的简单逻辑 (避免在 Worker 环境依赖外部库)
+      const getDomain = (url: string) => {
+        try {
+          const match = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:/\n?]+)/im);
+          return match && match[1] ? match[1] : null;
+        } catch {
+          return null;
+        }
+      };
+
+      // 2. 遍历并更新
+      for (const site of sites) {
+        if (site.id && site.url) {
+          const domain = getDomain(site.url);
+          if (domain) {
+            const newIcon = `https://www.faviconextractor.com/favicon/${domain}`;
+            // 只有当图标不同时才更新
+            if (site.icon !== newIcon) {
+              await this.updateSite(site.id, { icon: newIcon });
+              updatedCount++;
+            }
+          }
+        }
+      }
+
+      return { success: true, count: updatedCount };
+    } catch (error) {
+      console.error('批量更新图标失败:', error);
+      return { success: false, count: 0 };
+    }
   }
 }
 

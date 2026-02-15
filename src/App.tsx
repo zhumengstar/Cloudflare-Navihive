@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { NavigationClient } from './API/client';
 import { MockNavigationClient } from './API/mock';
 import { Site, Group } from './API/http';
+import { parseBookmarks } from './utils/bookmarkParser';
 import { GroupWithSites } from './types';
 import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
@@ -24,6 +25,7 @@ import './App.css';
 const CACHE_CONFIG_KEY = 'nav_configs_cache';
 const CACHE_DATA_KEY = 'nav_data_cache';
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24小时
+const IMPORT_TASK_KEY = 'navihive_import_task';
 
 const saveToCache = (key: string, data: any) => {
   try {
@@ -104,7 +106,13 @@ import {
   Zoom,
   Fade,
   useScrollTrigger,
+  Tabs,
+  Tab,
+  LinearProgress,
+  Paper,
+  Tooltip,
 } from '@mui/material';
+import { LoadingButton } from '@mui/lab';
 
 
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -113,6 +121,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import WarningIcon from '@mui/icons-material/Warning';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import ImportExportIcon from '@mui/icons-material/ImportExport';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // 根据环境选择使用真实API还是模拟API
 // @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
@@ -138,7 +152,7 @@ const DEFAULT_CONFIGS = {
   'site.customCss': '',
   'site.backgroundImage': '', // 背景图片URL
   'site.backgroundOpacity': '0.15', // 背景蒙版透明度
-  'site.iconApi': 'https://www.faviconextractor.com/favicon/{domain}?larger=true', // 默认使用的API接口，带上 ?larger=true 参数可以获取最大尺寸的图标
+  'site.iconApi': 'https://www.faviconextractor.com/favicon/{domain}', // 默认使用的API接口
   'site.searchBoxEnabled': 'true', // 是否启用搜索框
   'site.searchBoxGuestEnabled': 'true', // 访客是否可以使用搜索框
 };
@@ -218,6 +232,7 @@ function App() {
   const [_isAuthRequired, setIsAuthRequired] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -239,6 +254,9 @@ function App() {
   const [configs, setConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
   const [openConfig, setOpenConfig] = useState(false);
   const [tempConfigs, setTempConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
+
+  // 取消导入的标记
+  const isImportCancelled = useRef(false);
 
   // 渐进式加载状态：初始显示的分组数量
   const [visibleGroupsCount, setVisibleGroupsCount] = useState(5);
@@ -289,6 +307,11 @@ function App() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [importType, setImportType] = useState<'json' | 'chrome'>('json');
+  const [chromeImportProgress, setChromeImportProgress] = useState(0);
+
+  // 全局折叠/展开指令转换版本
+  const [globalToggleVersion, setGlobalToggleVersion] = useState<{ type: 'expand' | 'collapse', ts: number } | undefined>(undefined);
 
   // 错误提示框状态
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -297,6 +320,58 @@ function App() {
   // 导入结果提示框状态
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importResultMessage, setImportResultMessage] = useState('');
+
+  // 清除所有数据确认框状态
+  const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
+
+  // 清除所有数据处理函数
+  const handleClearAllData = async () => {
+    try {
+      setLoading(true);
+      const success = await api.clearAllData();
+      if (success) {
+        handleSuccess('所有书签已清除，系统已重置');
+        setClearDataConfirmOpen(false);
+        // 清空后再加载一遍数据（后端会重置一个默认分组）
+        await fetchData();
+      } else {
+        handleError('清除数据失败，请重试');
+      }
+    } catch (error) {
+      console.error('清除所有数据失败:', error);
+      handleError('操作失败，请检查网络或权限');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 持久化辅助函数
+  const saveImportTask = (task: any) => {
+    try {
+      localStorage.setItem(IMPORT_TASK_KEY, JSON.stringify({ ...task, timestamp: Date.now() }));
+    } catch (e) {
+      console.warn('保存任务失败:', e);
+    }
+  };
+
+  const clearImportTask = () => {
+    localStorage.removeItem(IMPORT_TASK_KEY);
+  };
+
+  // 恢复导入任务的函数
+  const handleResumeImport = async (task: any) => {
+    const { bookmarkGroups, processed, totalBookmarks, groupsCreated, groupsMerged, sitesCreated, sitesSkipped, type } = task;
+    if (type !== 'chrome' || !bookmarkGroups) return;
+
+    setImportLoading(true);
+    setImportType('chrome');
+    setChromeImportProgress(Math.round((processed / totalBookmarks) * 100));
+
+    // 异步执行
+    setTimeout(() => {
+      runImportIteration(bookmarkGroups, processed, totalBookmarks, groupsCreated, groupsMerged, sitesCreated, sitesSkipped);
+    }, 1000);
+  };
 
   // 跨分组拖拽状态
   const [draggedSiteId, setDraggedSiteId] = useState<string | null>(null);
@@ -315,6 +390,25 @@ function App() {
     }
   }, []);
 
+  // 页面加载完成后，检查是否有未完成的导入任务
+  useEffect(() => {
+    if (isAuthenticated) {
+      const savedTask = localStorage.getItem(IMPORT_TASK_KEY);
+      if (savedTask) {
+        try {
+          const task = JSON.parse(savedTask);
+          if (Date.now() - task.timestamp < 3600000) { // 1小时有效期
+            handleResumeImport(task);
+          } else {
+            clearImportTask();
+          }
+        } catch (e) {
+          clearImportTask();
+        }
+      }
+    }
+  }, [isAuthenticated]);
+
   // 菜单打开关闭
   // 检查认证状态
   const checkAuthStatus = async () => {
@@ -331,6 +425,7 @@ function App() {
         console.log('未认证，设置访客模式');
         api.isAuthenticated = false; // 同步 API 客户端状态
         setIsAuthenticated(false);
+        setIsAdmin(false);
         setIsAuthRequired(false);
         setViewMode('readonly');
         // 未认证时不自动加载数据，显示访客主页
@@ -342,7 +437,17 @@ function App() {
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
-        setUsername('admin'); // 这里可以优化为从 result 获取
+
+        // 获取详细用户资料以确定角色
+        try {
+          const profile = await api.getUserProfile();
+          setUsername(profile.username);
+          setIsAdmin(profile.role === 'admin');
+        } catch (e) {
+          console.warn('获取用户资料失败，回退到默认设置:', e);
+          setUsername('User');
+          setIsAdmin(false);
+        }
 
         // 只有且仅当认证成功后，才加载业务数据
         await fetchData();
@@ -1268,13 +1373,27 @@ function App() {
         return;
       }
 
+      // 1. 前端先行查重（忽略大小写和空格）
+      const trimmedName = newGroup.name.trim().toLowerCase();
+      const isDuplicate = groups.some(g => g.name.trim().toLowerCase() === trimmedName);
+      if (isDuplicate) {
+        handleError('该分组名称已存在，请换一个名称');
+        return;
+      }
+
       await api.createGroup(newGroup as Group);
       await fetchData(); // 重新加载数据
       handleCloseAddGroup();
-      setNewGroup({ name: '', order_num: 0 }); // 重置表单
+      setNewGroup({ name: '', order_num: 100 }); // 重置表单，order_num 默认给一个较大的值
+      handleSuccess('分组创建成功');
     } catch (error) {
       console.error('创建分组失败:', error);
-      handleError('创建分组失败: ' + (error as Error).message);
+      const errorMsg = (error as Error).message;
+      if (errorMsg.includes('已存在')) {
+        handleError('分组名称已存在');
+      } else {
+        handleError('创建分组失败: ' + errorMsg);
+      }
     }
   };
 
@@ -1498,11 +1617,17 @@ function App() {
   const handleOpenImport = () => {
     setImportFile(null);
     setImportError(null);
+    setImportType('json');
+    setChromeImportProgress(0);
     setOpenImport(true);
-
   };
 
   const handleCloseImport = () => {
+    if (importLoading) {
+      setSnackbarMessage('导入任务正在后台运行');
+      setSnackbarSeverity('info');
+      setSnackbarOpen(true);
+    }
     setOpenImport(false);
   };
 
@@ -1521,6 +1646,12 @@ function App() {
   const handleImportData = async () => {
     if (!importFile) {
       handleError('请选择要导入的文件');
+      return;
+    }
+
+    // 根据导入类型分流处理
+    if (importType === 'chrome') {
+      await handleImportChromeBookmarks();
       return;
     }
 
@@ -1596,6 +1727,202 @@ function App() {
       handleError('导入数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  // 处理 Chrome 书签导入
+  const handleImportChromeBookmarks = async () => {
+    if (!importFile) return;
+
+    try {
+      isImportCancelled.current = false;
+      setImportLoading(true);
+      setImportError(null);
+      setChromeImportProgress(0);
+
+      // --- 第一阶段：文件分析 ---
+      setSnackbarMessage('正在分析书签文件...');
+      setSnackbarSeverity('info');
+      setSnackbarOpen(true);
+
+      const htmlContent = await importFile.text();
+      const bookmarkGroups = parseBookmarks(htmlContent, '书签');
+
+      if (bookmarkGroups.length === 0) {
+        throw new Error('未在书签文件中找到任何有效书签');
+      }
+
+      // 统计分析结果
+      let totalBookmarks = 0;
+      bookmarkGroups.forEach(g => { totalBookmarks += g.bookmarks.length; });
+
+      // 分析完成，按用户要求设置进度为 100
+      setChromeImportProgress(100);
+      setSnackbarMessage(`分析完成，发现 ${totalBookmarks} 个书签，正在开始导入...`);
+      setSnackbarOpen(true);
+
+      // --- 第二阶段：执行导入 ---
+      await fetchData();
+      await runImportIteration(bookmarkGroups, 0, totalBookmarks, 0, 0, 0, 0);
+    } catch (error) {
+      console.error('导入Chrome书签失败:', error);
+      handleError('导入Chrome书签失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      setImportLoading(false);
+      setChromeImportProgress(0);
+      clearImportTask();
+    }
+  };
+
+  const runImportIteration = async (
+    bookmarkGroups: any[],
+    initialProcessed: number,
+    totalBookmarks: number,
+    initialGroupsCreated: number,
+    initialGroupsMerged: number,
+    initialSitesCreated: number,
+    initialSitesSkipped: number
+  ) => {
+    try {
+      let groupsCreated = initialGroupsCreated;
+      let groupsMerged = initialGroupsMerged;
+      let sitesCreated = initialSitesCreated;
+      let sitesSkipped = initialSitesSkipped;
+      let processed = initialProcessed;
+
+      // 刷新最新分组数据以确保匹配准确
+      await fetchData();
+
+      // 使用本地副本实时跟踪分组，包括本次导入新建的分组
+      let workingGroups = [...groups];
+
+      for (const bookmarkGroup of bookmarkGroups) {
+        // --- 取消检查 ---
+        if (isImportCancelled.current) {
+          clearImportTask();
+          setImportLoading(false);
+          setChromeImportProgress(0);
+          return;
+        }
+
+        const { groupName, bookmarks } = bookmarkGroup;
+
+        // 在实时更新的 workingGroups 中查找是否有同名分组
+        let targetGroup = workingGroups.find(
+          g => g.name.trim().toLowerCase() === groupName.trim().toLowerCase()
+        );
+
+        if (targetGroup) {
+          groupsMerged++;
+        } else {
+          try {
+            // --- 取消检查 ---
+            if (isImportCancelled.current) {
+              clearImportTask();
+              setImportLoading(false);
+              setChromeImportProgress(0);
+              return;
+            }
+
+            const newGroup = await api.createGroup({
+              name: groupName.trim(),
+              order_num: workingGroups.length,
+              is_public: 1,
+            } as Group);
+            targetGroup = { ...newGroup, sites: [] } as GroupWithSites;
+
+            // 关键：立即更新本地 workingGroups 引用，供下一个循环查重使用
+            workingGroups = [...workingGroups, targetGroup];
+
+            // 同步 UI 状态
+            setGroups(workingGroups);
+            groupsCreated++;
+          } catch (error) {
+            console.error(`恢复/创建分组 "${groupName}" 失败:`, error);
+            processed += bookmarks.length;
+            sitesSkipped += bookmarks.length;
+            continue;
+          }
+        }
+
+        const existingSites = targetGroup.sites || [];
+        let maxOrderNum = existingSites.length > 0
+          ? Math.max(...existingSites.map(s => s.order_num)) + 1
+          : 0;
+
+        // URL 规范化函数
+        const normalizeUrl = (u: string) => u.trim().toLowerCase().replace(/\/+$/, '');
+        const existingUrls = new Set(existingSites.map(s => normalizeUrl(s.url)));
+
+        for (const bookmark of bookmarks) {
+          // --- 取消检查 ---
+          if (isImportCancelled.current) {
+            clearImportTask();
+            setImportLoading(false);
+            setChromeImportProgress(0);
+            return;
+          }
+
+          const currentNormalizedUrl = normalizeUrl(bookmark.url);
+
+          if (existingUrls.has(currentNormalizedUrl)) {
+            // 如果已存在或者是已处理的，我们增加计数但跳过创建
+            sitesSkipped++;
+          } else {
+            try {
+              const siteName = bookmark.title || extractDomain(bookmark.url) || 'New Site';
+              const createdSite = await api.createSite({
+                name: siteName,
+                url: bookmark.url,
+                group_id: targetGroup.id as number,
+                order_num: maxOrderNum++,
+                is_public: 1,
+              } as Site);
+              sitesCreated++;
+              existingUrls.add(currentNormalizedUrl);
+              if (createdSite?.id) enrichSiteInBackground(createdSite.id, createdSite.url);
+            } catch (error) {
+              sitesSkipped++;
+            }
+          }
+
+          // 按照用户要求：百分比 = (已导入书签数 / 书签总数)
+          // 注意：这会导致非 100% 完成度（如果存在跳过），但在导入对话框中更直观
+          const progress = totalBookmarks > 0 ? Math.round((sitesCreated / totalBookmarks) * 100) : 0;
+          setChromeImportProgress(progress);
+
+          // 每处理 5 个书签持久化一次，避免频繁访问磁盘
+          if (processed % 5 === 0) {
+            saveImportTask({
+              type: 'chrome',
+              bookmarkGroups,
+              processed,
+              totalBookmarks,
+              groupsCreated,
+              groupsMerged,
+              sitesCreated,
+              sitesSkipped
+            });
+          }
+        }
+      }
+
+      // 完成后清理
+      const summary = [
+        `Chrome 书签导入完成！`,
+        `分组：发现${bookmarkGroups.length}个，新建${groupsCreated}个，合并${groupsMerged}个`,
+        `书签：共${totalBookmarks}个，新建${sitesCreated}个，跳过${sitesSkipped}个`,
+      ].join('\n');
+
+      setImportResultMessage(summary);
+      setImportResultOpen(true);
+      clearImportTask();
+
+      await fetchData();
+    } catch (error) {
+      console.error('迭代导入失败:', error);
+    } finally {
+      setImportLoading(false);
+      setChromeImportProgress(0);
     }
   };
 
@@ -1739,6 +2066,29 @@ function App() {
     }
   };
 
+  // 批量更新所有站点图标
+  const handleBatchUpdateIcons = async () => {
+    if (!window.confirm('确定要更新所有站点的图标吗？这会将所有现有图标 URL 替换为当前设置的 API 格式。')) {
+      return;
+    }
+
+    try {
+      setImportLoading(true); // 使用现有加载状态作为反馈
+      const result = await api.batchUpdateIcons();
+      if (result.success) {
+        handleSuccess(`成功更新了 ${result.count} 个站点的图标`);
+        await fetchData(); // 刷新数据
+      } else {
+        handleError('批量更新图标失败');
+      }
+    } catch (error) {
+      console.error('批量更新图标出错:', error);
+      handleError('批量更新图标出错: ' + (error as Error).message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -1785,6 +2135,65 @@ function App() {
           {importResultMessage}
         </Alert>
       </Snackbar>
+
+      {/* 后台任务进度条 (仅在对话框关闭且导入进行中显示) */}
+      {!openImport && importLoading && (
+        <Paper
+          elevation={6}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 3000,
+            width: { xs: '90%', sm: 360 },
+            p: 2,
+            borderRadius: 3,
+            bgcolor: 'background.paper',
+            border: 1,
+            borderColor: 'divider',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          }}
+        >
+          <Stack spacing={1}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={16} thickness={5} />
+                正在执行导入任务...
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {importType === 'chrome' ? `${chromeImportProgress}%` : '后台处理中'}
+              </Typography>
+            </Box>
+            {importType === 'chrome' && (
+              <LinearProgress variant="determinate" value={chromeImportProgress} sx={{ borderRadius: 1, height: 6 }} />
+            )}
+            {importType === 'json' && (
+              <LinearProgress variant="indeterminate" sx={{ borderRadius: 1, height: 6 }} />
+            )}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+              <Button
+                size="small"
+                color="error"
+                startIcon={<CancelIcon />}
+                onClick={() => {
+                  isImportCancelled.current = true;
+                  setImportLoading(false);
+                  setChromeImportProgress(0);
+                  clearImportTask();
+                  handleSuccess('导入已取消');
+                }}
+                sx={{ fontSize: '0.7rem', py: 0 }}
+              >
+                取消导入
+              </Button>
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
+              您可以继续浏览其它内容，完成后会自动刷新
+            </Typography>
+          </Stack>
+        </Paper>
+      )}
 
       <Box
         sx={{
@@ -1914,6 +2323,7 @@ function App() {
                 <Suspense fallback={null}>
                   <UserAvatar
                     username={username}
+                    isAdmin={isAdmin}
                     onLogout={handleLogout}
                     onSiteRestored={handleSiteRestored}
                     onStartGroupSort={startGroupSort}
@@ -1979,24 +2389,56 @@ function App() {
                     if (viewMode === 'readonly' && configs['site.searchBoxGuestEnabled'] !== 'true') return null;
 
                     return (
-                      <Box sx={{ mb: 4 }}>
-                        <SearchBox
-                          groups={groups}
-                          sites={groups.flatMap((g) => g.sites || [])}
-                          onDelete={isAuthenticated ? handleSiteDelete : undefined}
-                          onEditGroup={(id) => {
-                            const group = groups.find(g => g.id === id);
-                            if (group) setGroupToEdit(group);
-                          }}
-                          onMoveSite={(siteId) => handleSiteSettingsOpen(siteId)}
-                          onInternalResultClick={(result: SearchResultItem) => {
-                            if (result.type === 'group' || (result.type === 'site' && result.groupId)) {
-                              const targetId = result.type === 'group' ? result.id : result.groupId!;
-                              const element = document.getElementById(`group-${targetId}`);
-                              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }
-                          }}
-                        />
+                      <Box sx={{ mb: 4, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        <Box sx={{ flexGrow: 1 }}>
+                          <SearchBox
+                            groups={groups}
+                            sites={groups.flatMap((g) => g.sites || [])}
+                            onDelete={isAuthenticated ? handleSiteDelete : undefined}
+                            onEditGroup={(id) => {
+                              const group = groups.find(g => g.id === id);
+                              if (group) setGroupToEdit(group);
+                            }}
+                            onMoveSite={(siteId) => handleSiteSettingsOpen(siteId)}
+                            onInternalResultClick={(result: SearchResultItem) => {
+                              if (result.type === 'group' || (result.type === 'site' && result.groupId)) {
+                                const targetId = result.type === 'group' ? result.id : result.groupId!;
+                                const element = document.getElementById(`group-${targetId}`);
+                                element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }
+                            }}
+                          />
+                        </Box>
+
+                        {/* 批量收起/展开按钮组 */}
+                        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                          <Tooltip title="全部收起">
+                            <IconButton
+                              size="medium"
+                              onClick={() => setGlobalToggleVersion({ type: 'collapse', ts: Date.now() })}
+                              sx={{
+                                bgcolor: 'background.paper',
+                                boxShadow: 1,
+                                '&:hover': { bgcolor: 'action.hover' }
+                              }}
+                            >
+                              <UnfoldLessIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="全部展开">
+                            <IconButton
+                              size="medium"
+                              onClick={() => setGlobalToggleVersion({ type: 'expand', ts: Date.now() })}
+                              sx={{
+                                bgcolor: 'background.paper',
+                                boxShadow: 1,
+                                '&:hover': { bgcolor: 'action.hover' }
+                              }}
+                            >
+                              <UnfoldMoreIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </Box>
                     );
                   })()}
@@ -2044,6 +2486,7 @@ function App() {
                                   onSettingsOpen={handleSiteSettingsOpen}
                                   configs={configs}
                                   draggedSiteId={draggedSiteId}
+                                  globalToggleVersion={globalToggleVersion}
                                 />
                               ))}
                               {groups.length > visibleGroupsCount && (
@@ -2249,7 +2692,7 @@ function App() {
                             if (domain) {
                               const actualIconApi =
                                 configs['site.iconApi'] ||
-                                'https://www.faviconextractor.com/favicon/{domain}?larger=true';
+                                'https://www.faviconextractor.com/favicon/{domain}';
                               const iconUrl = actualIconApi.replace('{domain}', domain);
                               setNewSite({
                                 ...newSite,
@@ -2516,6 +2959,41 @@ function App() {
                   onChange={handleConfigInputChange}
                   placeholder='/* 自定义样式 */\nbody { }'
                 />
+
+                <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                  <Typography variant="subtitle2" color="error" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <WarningIcon fontSize="small" /> 危险区域
+                  </Typography>
+                  <Stack spacing={2}>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      fullWidth
+                      startIcon={<RefreshIcon />}
+                      onClick={handleBatchUpdateIcons}
+                      disabled={importLoading}
+                      sx={{ borderRadius: 2 }}
+                    >
+                      批量更新所有图标
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      fullWidth
+                      startIcon={<DeleteSweepIcon />}
+                      onClick={() => {
+                        setOpenConfig(false);
+                        setClearDataConfirmOpen(true);
+                      }}
+                      sx={{ borderRadius: 2, borderStyle: 'dashed' }}
+                    >
+                      重置系统数据
+                    </Button>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
+                    清空所有分组和书签，系统将恢复到初始状态
+                  </Typography>
+                </Box>
               </Stack>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3 }}>
@@ -2537,7 +3015,8 @@ function App() {
             PaperProps={{
               sx: {
                 m: { xs: 2, sm: 'auto' },
-                width: { xs: 'calc(100% - 32px)', sm: 'auto' },
+                width: { xs: 'calc(100% - 32px)', sm: 500 },
+                minHeight: 450,
               },
             }}
           >
@@ -2555,9 +3034,22 @@ function App() {
                 <CloseIcon />
               </IconButton>
             </DialogTitle>
-            <DialogContent>
-              <DialogContentText sx={{ mb: 2 }}>
-                请选择要导入的JSON文件，导入将覆盖现有数据。
+            <DialogContent sx={{ minHeight: 220 }}>
+              <Tabs
+                value={importType}
+                onChange={(_e, v) => {
+                  setImportType(v as 'json' | 'chrome');
+                  setImportError(null);
+                }}
+                sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+              >
+                <Tab label='JSON 数据' value='json' />
+                <Tab label='Chrome 书签' value='chrome' />
+              </Tabs>
+              <DialogContentText sx={{ mb: 2, minHeight: 40 }}>
+                {importType === 'json'
+                  ? '请选择要导入的JSON文件，导入将覆盖现有数据。'
+                  : '请选择 Chrome 导出的书签 HTML 文件，按文件夹分组导入，同名分组自动合并。'}
               </DialogContentText>
               <Box sx={{ mb: 2 }}>
                 <Button
@@ -2565,9 +3057,15 @@ function App() {
                   component='label'
                   startIcon={<FileUploadIcon />}
                   sx={{ mb: 2 }}
+                  disabled={importLoading}
                 >
                   选择文件
-                  <input type='file' hidden accept='.json' onChange={handleFileSelect} />
+                  <input
+                    type='file'
+                    hidden
+                    accept={importType === 'json' ? '.json' : '.html,.htm'}
+                    onChange={handleFileSelect}
+                  />
                 </Button>
                 {importFile && (
                   <Typography variant='body2' sx={{ mt: 1 }}>
@@ -2575,6 +3073,18 @@ function App() {
                   </Typography>
                 )}
               </Box>
+              {importType === 'chrome' && importLoading && chromeImportProgress > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                    <Box sx={{ width: '100%', mr: 1 }}>
+                      <LinearProgress variant='determinate' value={chromeImportProgress} />
+                    </Box>
+                    <Typography variant='body2' color='text.secondary' sx={{ minWidth: 40 }}>
+                      {chromeImportProgress}%
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
               {importError && (
                 <Alert severity='error' sx={{ mb: 2 }}>
                   {importError}
@@ -2582,7 +3092,7 @@ function App() {
               )}
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3 }}>
-              <Button onClick={handleCloseImport} variant='outlined'>
+              <Button onClick={handleCloseImport} variant='outlined' disabled={importLoading}>
                 取消
               </Button>
               <Button
@@ -2623,7 +3133,7 @@ function App() {
                   url: site.url,
                   order_num: orderNum,
                   is_public: 1,
-                  icon: '',
+                  icon: `https://www.faviconextractor.com/favicon/${new URL(site.url).hostname}`,
                   description: '',
                   notes: ''
                 };
@@ -2703,6 +3213,46 @@ function App() {
           />
         )
       }
+
+      {/* 清除所有数据确认对话框 */}
+      <Dialog
+        open={clearDataConfirmOpen}
+        onClose={() => !loading && setClearDataConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3, p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main', fontWeight: 'bold' }}>
+          <WarningIcon /> 危险操作确认
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom>
+            您确定要<strong>清除所有书签和分组</strong>吗？
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            此操作将彻底删除数据库中所有的个人书签数据，且<strong>不可撤销</strong>。清空后系统将为您保留一个默认的初始分组。
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button
+            onClick={() => setClearDataConfirmOpen(false)}
+            disabled={loading}
+          >
+            取消
+          </Button>
+          <LoadingButton
+            onClick={handleClearAllData}
+            loading={loading}
+            variant="contained"
+            color="error"
+            startIcon={<DeleteSweepIcon />}
+          >
+            确认清空
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
 
       <SiteSettingsModal
         site={siteToSettings || { id: 0, name: '', url: '', group_id: 0, order_num: 0, is_public: 1, icon: '', description: '', notes: '' }}
