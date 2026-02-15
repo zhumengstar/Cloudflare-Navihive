@@ -277,7 +277,6 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         fontSize: '1rem',
                         fontWeight: 'bold',
                         cursor: 'pointer',
-                        transition: 'box-shadow 0.2s',
                         '&:hover': {
                             boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.3)',
                         },
@@ -526,6 +525,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 </ListItemIcon>
                                 <ListItemText
                                     primary='账号状态'
+                                    secondary={isAdmin ? '管理员' : '普通用'}
                                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                                 />
                                 <Chip label='已登录' color='success' size='small' variant='outlined' />
@@ -653,4 +653,4 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     );
 };
 
-export default UserAvatar;
+export default React.memo(UserAvatar);

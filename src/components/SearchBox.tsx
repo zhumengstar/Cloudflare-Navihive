@@ -170,7 +170,10 @@ const SearchBox: React.FC<SearchBoxProps> = ({
       setQuery('');
       setResults([]);
       setShowResults(false);
-      inputRef.current?.focus();
+      // Defer focus to allow UI update to happen first, reducing perceived lag
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -260,7 +263,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   }, []);
 
   // 处理输入框聚焦
-  const handleInputFocus = () => {
+  const handleInputFocus = useCallback(() => {
     if (mode === 'internal') {
       if (!query.trim()) {
         // 空查询时显示所有站点（限制前 50 个以防卡顿）
@@ -270,7 +273,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
         handleInternalSearch(query);
       }
     }
-  };
+  }, [mode, query, showResults, handleInternalSearch]);
 
   return (
     <Box ref={searchBoxRef} sx={{ position: 'relative', width: '100%', maxWidth: 800, mx: 'auto' }}>
@@ -291,9 +294,12 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           fullWidth={isMobile}
           sx={{
             flexShrink: 0,
+            height: 48,
             '& .MuiToggleButton-root': {
               flex: { xs: 1, sm: 'initial' },
-              py: { xs: 0.5, sm: 0.5 }
+              px: 2,
+              border: '1px solid',
+              borderColor: 'divider',
             }
           }}
         >
@@ -320,7 +326,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            p: 0.5,
+            p: '2px 4px',
+            height: 48,
             borderRadius: 3,
             transition: 'all 0.3s',
             flex: 1,
@@ -438,4 +445,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   );
 };
 
-export default SearchBox;
+// Use React.memo with a custom comparison function to ignore unstable callbacks if safe,
+// or just standard memo to prevent parent re-renders when props match.
+// Since groups/sites can be large, we'll verify if they changed.
+export default React.memo(SearchBox);

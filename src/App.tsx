@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { NavigationClient } from './API/client';
 import { MockNavigationClient } from './API/mock';
 import { Site, Group } from './API/http';
@@ -270,7 +270,7 @@ function App() {
           },
         },
         shape: {
-          borderRadius: 16,
+          borderRadius: 4, // Reset to default (4px base)
         },
         typography: {
           fontFamily: '"Roboto", "Inter", "Helvetica", "Arial", sans-serif',
@@ -319,7 +319,7 @@ function App() {
           MuiButton: {
             styleOverrides: {
               root: {
-                borderRadius: 12,
+                borderRadius: 8,
                 boxShadow: 'none',
                 '&:hover': {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -335,7 +335,7 @@ function App() {
           MuiDialog: {
             styleOverrides: {
               paper: {
-                borderRadius: 24,
+                borderRadius: 16,
                 backdropFilter: 'blur(16px)',
                 backgroundColor: darkMode ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)',
                 border: '1px solid var(--glass-border)',
@@ -347,7 +347,7 @@ function App() {
             styleOverrides: {
               root: {
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 12,
+                  borderRadius: 8,
                   backgroundColor: darkMode ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.4)',
                   '& fieldset': {
                     borderColor: 'rgba(128, 128, 128, 0.3)',
@@ -472,6 +472,11 @@ function App() {
 
   // 清除所有数据确认框状态
   const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
+
+  // 打开清除数据确认框 (Memoized)
+  const handleOpenResetData = useCallback(() => {
+    setClearDataConfirmOpen(true);
+  }, []);
 
   // 清除所有数据处理函数
   const handleClearAllData = async () => {
@@ -747,8 +752,28 @@ function App() {
     }
   };
 
+  // 加载配置
+  const fetchConfigs = useCallback(async () => {
+    try {
+      const configsData = await api.getConfigs();
+      const finalConfigs = {
+        ...DEFAULT_CONFIGS,
+        ...configsData,
+      };
+
+      setConfigs(finalConfigs);
+      setTempConfigs(finalConfigs);
+
+      // 保存到缓存
+      saveToCache(CACHE_CONFIG_KEY, configsData);
+    } catch (error) {
+      console.error('加载配置失败:', error);
+      // 如果没有缓存也没有接口数据，使用默认配置（已经在初期状态中设置）
+    }
+  }, [api]);
+
   // 登出功能
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     // 强制取消正在进行的导入任务
     isImportCancelled.current = true;
     setImportLoading(false);
@@ -766,28 +791,7 @@ function App() {
     localStorage.removeItem(CACHE_DATA_KEY);
     // await fetchData(); // 不再加载公开数据
     await fetchConfigs(); // 配置可能需要重置（如标题等）
-  };
-
-  // 加载配置
-  const fetchConfigs = async () => {
-
-    try {
-      const configsData = await api.getConfigs();
-      const finalConfigs = {
-        ...DEFAULT_CONFIGS,
-        ...configsData,
-      };
-
-      setConfigs(finalConfigs);
-      setTempConfigs(finalConfigs);
-
-      // 保存到缓存
-      saveToCache(CACHE_CONFIG_KEY, configsData);
-    } catch (error) {
-      console.error('加载配置失败:', error);
-      // 如果没有缓存也没有接口数据，使用默认配置（已经在初期状态中设置）
-    }
-  };
+  }, [api, fetchConfigs]);
 
   useEffect(() => {
     // 立即开始并行初始化
@@ -895,43 +899,8 @@ function App() {
     setSnackbarOpen(false);
   };
 
-  const fetchData = async () => {
-    try {
-      // 只有在完全没有数据（缓存也没）时才展示 loading
-      if (groups.length === 0) {
-        setLoading(true);
-      }
-      setError(null);
-
-      // 使用新的 getGroupsWithSites API 优化 N+1 查询问题
-      const groupsWithSites = await api.getGroupsWithSites();
-
-      setGroups(groupsWithSites);
-
-      // 只有在已认证模式下才缓存业务数据
-      if (isAuthenticated) {
-        saveToCache(CACHE_DATA_KEY, groupsWithSites);
-      }
-    } catch (error) {
-      console.error('加载数据失败:', error);
-
-      // 仅在完全没有数据可显示时才弹出错误
-      if (groups.length === 0) {
-        handleError('加载数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
-      }
-
-      // 如果因为认证问题导致加载失败，处理认证状态
-    } finally {
-      setLoading(false);
-      // 加载完成后，如果是编辑模式且已认证，触发后台自动补全
-      if (viewMode === 'edit' && isAuthenticated) {
-        scavengeSiteInfo();
-      }
-    }
-  };
-
   // 后台自动补全缺失的站点信息
-  const scavengeSiteInfo = async () => {
+  const scavengeSiteInfo = useCallback(async () => {
     // 找出名称或描述为空的站点
     const sitesToRefresh: Site[] = [];
     groups.forEach(group => {
@@ -1005,7 +974,44 @@ function App() {
         console.warn(`后台自动补全失败 [${site.url}]:`, err);
       }
     }
-  };
+  }, [groups, configs, api]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      // 只有在完全没有数据（缓存也没）时才展示 loading
+      if (groups.length === 0) {
+        setLoading(true);
+      }
+      setError(null);
+
+      // 使用新的 getGroupsWithSites API 优化 N+1 查询问题
+      const groupsWithSites = await api.getGroupsWithSites();
+
+      setGroups(groupsWithSites);
+
+      // 只有在已认证模式下才缓存业务数据
+      if (isAuthenticated) {
+        saveToCache(CACHE_DATA_KEY, groupsWithSites);
+      }
+    } catch (error) {
+      console.error('加载数据失败:', error);
+
+      // 仅在完全没有数据可显示时才弹出错误
+      if (groups.length === 0) {
+        handleError('加载数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      }
+
+      // 如果因为认证问题导致加载失败，处理认证状态
+    } finally {
+      setLoading(false);
+      // 加载完成后，如果是编辑模式且已认证，触发后台自动补全
+      if (viewMode === 'edit' && isAuthenticated) {
+        scavengeSiteInfo();
+      }
+    }
+  }, [groups.length, isAuthenticated, viewMode, api, scavengeSiteInfo]);
+
+
 
   // 更新站点
   const handleSiteUpdate = async (updatedSite: Site) => {
@@ -1102,29 +1108,29 @@ function App() {
   };
 
   // 启动分组排序
-  const startGroupSort = () => {
+  const startGroupSort = useCallback(() => {
     console.log('开始分组排序');
     setSortMode(SortMode.GroupSort);
     setCurrentSortingGroupId(null);
 
-  };
+  }, []);
 
   // 启动站点排序
-  const startSiteSort = (groupId: number) => {
+  const startSiteSort = useCallback((groupId: number) => {
     console.log('开始站点排序');
     setSortMode(SortMode.SiteSort);
     setCurrentSortingGroupId(groupId);
 
-  };
+  }, []);
 
   // 取消排序
-  const cancelSort = () => {
+  const cancelSort = useCallback(() => {
     setSortMode(SortMode.None);
     setCurrentSortingGroupId(null);
-  };
+  }, []);
 
   // 处理站点恢复
-  const handleSiteRestored = (siteOrSites: Site | Site[]) => {
+  const handleSiteRestored = useCallback((siteOrSites: Site | Site[]) => {
     const sitesToRestore = Array.isArray(siteOrSites) ? siteOrSites : [siteOrSites];
     if (sitesToRestore.length === 0) return;
 
@@ -1185,7 +1191,7 @@ function App() {
 
       return prevGroups;
     });
-  };
+  }, [fetchData]);
 
   // 辅助函数：从URL获取站点信息
   const handleUrlBlur = async (url: string) => {
@@ -1233,12 +1239,12 @@ function App() {
 
   // 提交修改分组
   // 启动跨分组拖动模式
-  const startCrossGroupDrag = () => {
+  const startCrossGroupDrag = useCallback(() => {
     console.log('开始跨分组拖动');
     setSortMode(SortMode.CrossGroupDrag);
     setCurrentSortingGroupId(null);
 
-  };
+  }, []);
 
   // 处理跨分组拖拽的 DragOver 事件
   const handleSiteDragOver = (event: DragOverEvent) => {
@@ -1508,9 +1514,9 @@ function App() {
   };
 
   // 新增分组相关函数
-  const handleOpenAddGroup = () => {
+  const handleOpenAddGroup = useCallback(() => {
     setOpenAddGroup(true);
-  };
+  }, []);
 
   const handleCloseAddGroup = () => {
     setOpenAddGroup(false);
@@ -1638,14 +1644,14 @@ function App() {
   };
 
   // 配置相关函数
-  const handleOpenConfig = () => {
+  const handleOpenConfig = useCallback(() => {
     setTempConfigs({ ...configs });
     setOpenConfig(true);
-  };
+  }, [configs]);
 
-  const handleCloseConfig = () => {
+  const handleCloseConfig = useCallback(() => {
     setOpenConfig(false);
-  };
+  }, []);
 
   const handleConfigInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTempConfigs({
@@ -1674,7 +1680,7 @@ function App() {
   };
 
   // 快捷更新配置函数（供其他组件直接调用）
-  const handleUpdateConfigs = async (newConfigs: Record<string, string>) => {
+  const handleUpdateConfigs = useCallback(async (newConfigs: Record<string, string>) => {
     try {
       // 找出有变化的配置项并同步到后端
       for (const [key, value] of Object.entries(newConfigs)) {
@@ -1689,10 +1695,10 @@ function App() {
       console.error('更新配置失败:', error);
       handleError('更新配置失败: ' + (error as Error).message);
     }
-  };
+  }, [api, configs]);
 
   // 处理导出数据
-  const handleExportData = async () => {
+  const handleExportData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -1735,16 +1741,16 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [groups, configs]);
 
   // 处理导入对话框
-  const handleOpenImport = () => {
+  const handleOpenImport = useCallback(() => {
     setImportFile(null);
     setImportError(null);
     setImportType('json');
     setChromeImportProgress(0);
     setOpenImport(true);
-  };
+  }, []);
 
   const handleCloseImport = () => {
     if (importLoading) {
@@ -2191,7 +2197,7 @@ function App() {
   };
 
   // 批量更新所有站点图标
-  const handleBatchUpdateIcons = async () => {
+  const handleBatchUpdateIcons = useCallback(async () => {
     try {
       setImportLoading(true); // 使用现有加载状态作为反馈
       const result = await api.batchUpdateIcons();
@@ -2207,7 +2213,7 @@ function App() {
     } finally {
       setImportLoading(false);
     }
-  };
+  }, [api, fetchData]);
 
   const ActiveLayout = configs['ui.style'] === 'classic' ? ClassicLayout : ModernLayout;
 
@@ -2428,7 +2434,7 @@ function App() {
                     configs={configs}
                     onUpdateConfigs={handleUpdateConfigs}
                     onBatchUpdateIcons={handleBatchUpdateIcons}
-                    onResetData={() => setClearDataConfirmOpen(true)}
+                    onResetData={handleOpenResetData}
                     api={api}
                   />
                 </Suspense>
