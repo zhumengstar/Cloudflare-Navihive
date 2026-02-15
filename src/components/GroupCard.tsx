@@ -363,9 +363,8 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
           borderColor: 'divider',
           transform: sortMode === 'None' ? 'scale(1.01)' : 'none',
         },
-        backgroundColor: (theme) =>
-          theme.palette.mode === 'dark' ? 'rgba(33, 33, 33, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(5px)',
+        // Remove inline background/backdrop to use theme defaults
+        background: 'rgba(255, 255, 255, 0.05)', // Extremely subtle layer
       }}
     >
       <Box

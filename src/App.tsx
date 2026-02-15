@@ -7,6 +7,8 @@ import { GroupWithSites } from './types';
 import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
 import SiteCard from './components/SiteCard';
+import ModernLayout from './layouts/ModernLayout';
+import ClassicLayout from './layouts/ClassicLayout';
 
 // 懒加载大型组件
 const LoginForm = lazy(() => import('./components/LoginForm'));
@@ -80,7 +82,7 @@ import SortableGroupItem from './components/SortableGroupItem';
 import PageSkeleton from './components/LoadingSkeleton';
 // Material UI 导入
 import {
-  Container,
+
   Typography,
   Box,
   Button,
@@ -154,6 +156,7 @@ const DEFAULT_CONFIGS = {
   'site.iconApi': 'https://www.faviconextractor.com/favicon/{domain}', // 默认使用的API接口
   'site.searchBoxEnabled': 'true', // 是否启用搜索框
   'site.searchBoxGuestEnabled': 'true', // 访客是否可以使用搜索框
+  'ui.style': 'modern', // UI风格: 'modern' | 'classic'
 };
 
 function ScrollTop(props: { children: React.ReactElement; window?: () => Window }) {
@@ -201,15 +204,8 @@ function App() {
   });
 
   // 创建Material UI主题
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: darkMode ? 'dark' : 'light',
-        },
-      }),
-    [darkMode]
-  );
+  // Create Material UI Theme
+
 
   // 切换主题的回调函数
   const toggleTheme = () => {
@@ -253,6 +249,164 @@ function App() {
   const [configs, setConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
   const [openConfig, setOpenConfig] = useState(false);
   const [tempConfigs, setTempConfigs] = useState<Record<string, string>>(DEFAULT_CONFIGS);
+
+  // Create Material UI Theme
+  const uiStyle = configs['ui.style'] || 'modern';
+
+  const theme = useMemo(
+    () => {
+      const isModern = uiStyle === 'modern';
+
+      // Modern Theme (Glassmorphism)
+      const modernTheme = {
+        palette: {
+          mode: darkMode ? 'dark' : 'light' as 'dark' | 'light',
+          primary: {
+            main: darkMode ? '#8b5cf6' : '#6366f1', // Violet / Indigo
+          },
+          background: {
+            default: 'transparent',
+            paper: darkMode ? 'rgba(30, 30, 30, 0.6)' : 'rgba(255, 255, 255, 0.7)',
+          },
+        },
+        shape: {
+          borderRadius: 16,
+        },
+        typography: {
+          fontFamily: '"Roboto", "Inter", "Helvetica", "Arial", sans-serif',
+          h1: { fontWeight: 700 },
+          h2: { fontWeight: 700 },
+          h3: { fontWeight: 600 },
+          h4: { fontWeight: 600 },
+          h5: { fontWeight: 600 },
+          h6: { fontWeight: 600 },
+          button: { textTransform: 'none' as const, fontWeight: 600 },
+        },
+        components: {
+          MuiCssBaseline: {
+            styleOverrides: {
+              body: {
+                backgroundColor: 'transparent',
+              },
+            },
+          },
+          MuiPaper: {
+            styleOverrides: {
+              root: {
+                backgroundImage: 'none',
+                backdropFilter: 'blur(10px)',
+                backgroundColor: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                boxShadow: 'var(--glass-shadow)',
+              },
+            },
+          },
+          MuiCard: {
+            styleOverrides: {
+              root: {
+                backdropFilter: 'blur(10px)',
+                backgroundColor: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                boxShadow: 'var(--glass-shadow)',
+                transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: '0 12px 40px 0 rgba(0, 0, 0, 0.15)',
+                },
+              },
+            },
+          },
+          MuiButton: {
+            styleOverrides: {
+              root: {
+                borderRadius: 12,
+                boxShadow: 'none',
+                '&:hover': {
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                },
+              },
+              containedPrimary: {
+                background: darkMode
+                  ? 'linear-gradient(45deg, #8b5cf6 30%, #6366f1 90%)'
+                  : 'linear-gradient(45deg, #6366f1 30%, #8b5cf6 90%)',
+              }
+            },
+          },
+          MuiDialog: {
+            styleOverrides: {
+              paper: {
+                borderRadius: 24,
+                backdropFilter: 'blur(16px)',
+                backgroundColor: darkMode ? 'rgba(30, 30, 30, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+                border: '1px solid var(--glass-border)',
+                boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+              },
+            },
+          },
+          MuiTextField: {
+            styleOverrides: {
+              root: {
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 12,
+                  backgroundColor: darkMode ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.4)',
+                  '& fieldset': {
+                    borderColor: 'rgba(128, 128, 128, 0.3)',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'rgba(128, 128, 128, 0.5)',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      // Classic Theme (Restored)
+      const classicTheme = {
+        palette: {
+          mode: darkMode ? 'dark' : 'light' as 'dark' | 'light',
+          primary: { main: '#1976d2' }, // Default Blue
+          secondary: { main: '#dc004e' },
+          background: {
+            default: darkMode ? '#121212' : '#f5f5f5',
+            paper: darkMode ? '#1e1e1e' : '#ffffff',
+          },
+        },
+        typography: {
+          fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+        },
+        components: {
+          MuiCssBaseline: {
+            styleOverrides: {
+              body: {
+                backgroundColor: darkMode ? '#121212' : '#f5f5f5',
+              }
+            }
+          },
+          MuiPaper: {
+            styleOverrides: {
+              root: {
+                backgroundImage: 'none',
+              }
+            }
+          }
+        }
+      };
+
+      return createTheme(isModern ? modernTheme : classicTheme);
+    },
+    [darkMode, uiStyle]
+  );
+
+  // Update body class for modern theme animation
+  useEffect(() => {
+    if (uiStyle === 'modern') {
+      document.body.classList.add('modern-theme');
+    } else {
+      document.body.classList.remove('modern-theme');
+    }
+  }, [uiStyle]);
 
   // 取消导入的标记
   const isImportCancelled = useRef(false);
@@ -2055,6 +2209,8 @@ function App() {
     }
   };
 
+  const ActiveLayout = configs['ui.style'] === 'classic' ? ClassicLayout : ModernLayout;
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -2206,39 +2362,10 @@ function App() {
           </>
         )}
 
-        <Container
-          maxWidth='lg'
-          sx={{
-            py: { xs: 2, sm: 3, md: 4 },
-            px: { xs: 1.5, sm: 2, md: 3 },
-            position: 'relative', // 使内容位于背景图片和蒙版之上
-            zIndex: 2,
-            transition: 'padding 0.3s ease',
-          }}
-        >
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              justifyContent: 'space-between',
-              alignItems: { xs: 'center', sm: 'flex-start' },
-              mb: { xs: 4, sm: 5 },
-              gap: { xs: 2, sm: 0 },
-            }}
-          >
-            <Typography
-              variant='h3'
-              component='h1'
-              fontWeight='bold'
-              color='text.primary'
-              sx={{
-                fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
-                textAlign: { xs: 'center', sm: 'left' },
-                mb: { xs: 0, sm: 0 }
-              }}
-            >
-              {configs['site.name']}
-            </Typography>
+        <ActiveLayout
+          title={configs['site.name'] || ''}
+          configs={configs}
+          headerContent={
             <Stack
               direction='row'
               spacing={1}
@@ -2327,8 +2454,8 @@ function App() {
                 <GitHubIcon />
               </IconButton>
             </Stack>
-          </Box>
-
+          }
+        >
           {(!isAuthenticated && !isAuthChecking && groups.length === 0) ? (
             <Suspense fallback={<PageSkeleton />}>
               <VisitorHome
@@ -2731,6 +2858,39 @@ function App() {
                   value={tempConfigs['site.name']}
                   onChange={handleConfigInputChange}
                 />
+
+                {/* UI Style Toggle */}
+                <Box sx={{ mb: 1, mt: 1, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Typography variant='subtitle1' gutterBottom>
+                    界面风格
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={tempConfigs['ui.style'] !== 'classic'} // Default to modern if undefined or 'modern'
+                        onChange={(e) =>
+                          setTempConfigs({
+                            ...tempConfigs,
+                            'ui.style': e.target.checked ? 'modern' : 'classic',
+                          })
+                        }
+                        color='primary'
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant='body1'>
+                          {tempConfigs['ui.style'] === 'classic' ? '经典模式' : '现代模式 (Glassmorphism)'}
+                        </Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          {tempConfigs['ui.style'] === 'classic'
+                            ? '使用传统的卡片样式和背景图片'
+                            : '使用毛玻璃特效和动态渐变背景'}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </Box>
                 {/* 获取图标API设置项 */}
                 <Box sx={{ mb: 1 }}>
                   <Typography variant='subtitle1' gutterBottom>
@@ -2979,7 +3139,7 @@ function App() {
             </DialogActions>
           </Dialog>
 
-        </Container>
+        </ActiveLayout>
         <ScrollTop>
           <Fab size="large" aria-label="scroll back to top" color="primary">
             <KeyboardArrowUpIcon fontSize="large" />
