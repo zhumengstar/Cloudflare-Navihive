@@ -42,6 +42,8 @@ interface SiteSettingsModalProps {
   open: boolean;
   groups?: Group[]; // 可选的分组列表
   iconApi?: string; // 图标API配置
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  api: any;
 }
 
 const SiteSettingsModal = memo(function SiteSettingsModal({
@@ -52,6 +54,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
   open,
   groups = [],
   iconApi = 'https://www.faviconextractor.com/favicon/{domain}?larger=true',
+  api,
 }: SiteSettingsModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -139,6 +142,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
   };
 
   // 提交表单
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -149,19 +153,31 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
       return;
     }
 
+    setValidationError(null);
+
+    // 如果名称为空，自动从 URL生成
+    let finalName = formData.name;
+    let finalDescription = formData.description;
+    let finalIcon = formData.icon;
+
+    if (!finalName || finalName.trim() === '') {
+      const domain = extractDomain(formData.url);
+      finalName = domain || 'New Site';
+    }
+
     // 验证图标 URL（如果提供）
-    if (formData.icon && !isSecureUrl(formData.icon) && !formData.icon.startsWith('/')) {
+    if (finalIcon && !isSecureUrl(finalIcon) && !finalIcon.startsWith('/')) {
       setValidationError('图标 URL 不安全，只允许 HTTPS 协议和公网地址');
       return;
     }
-
-    // 清除验证错误
-    setValidationError(null);
 
     // 更新网站信息，将group_id转为数字
     onUpdate({
       ...site,
       ...formData,
+      name: finalName,
+      description: finalDescription,
+      icon: finalIcon,
       group_id: Number(formData.group_id),
     });
 
@@ -169,6 +185,47 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
   };
 
   // 自动获取站点信息
+  const [fetchingInfo, setFetchingInfo] = useState(false);
+
+  const fetchSiteInfo = async (url: string) => {
+    if (!url) return;
+
+    // 只有当名称或描述为空时才自动填充
+    if (formData.name && formData.description) return;
+
+    try {
+      setFetchingInfo(true);
+
+      // 1. 自动获取图标 (保持现有逻辑)
+      const domain = extractDomain(url);
+      if (domain) {
+        const actualIconApi = iconApi || 'https://www.faviconextractor.com/favicon/{domain}?larger=true';
+        const iconUrl = actualIconApi.replace('{domain}', domain);
+        if (!formData.icon) {
+          setFormData(prev => ({ ...prev, icon: iconUrl }));
+          setIconPreview(iconUrl);
+        }
+      }
+
+      // 2. 自动获取标题和描述
+      // @ts-ignore - api type is any for now or defined in prop
+      if (api && typeof api.fetchSiteInfo === 'function') {
+        const info = await api.fetchSiteInfo(url);
+        if (info.success) {
+          setFormData(prev => ({
+            ...prev,
+            name: prev.name || info.name || prev.name,
+            description: prev.description || info.description || prev.description,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('自动获取站点信息失败:', err);
+    } finally {
+      setFetchingInfo(false);
+    }
+  };
+
   const handleUrlBlur = async () => {
     if (!formData.url) return;
 
@@ -184,37 +241,19 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
       return;
     }
 
-    // 1. 自动获取图标 (保持现有逻辑)
-    const domain = extractDomain(url);
-    if (domain) {
-      const actualIconApi = iconApi || 'https://www.faviconextractor.com/favicon/{domain}?larger=true';
-      const iconUrl = actualIconApi.replace('{domain}', domain);
-      if (!formData.icon) {
-        setFormData(prev => ({ ...prev, icon: iconUrl }));
-        setIconPreview(iconUrl);
-      }
-    }
-
-    // 2. 自动获取标题和描述
-    // 只有当名称或描述为空时才自动填充，避免覆盖用户的手动输入
-    if (!formData.name || !formData.description) {
-      try {
-        const client = (window as any).apiClient; // 假设 apiClient 已在全局或通过 props 注入
-        if (client && typeof client.fetchSiteInfo === 'function') {
-          const info = await client.fetchSiteInfo(url);
-          if (info.success) {
-            setFormData(prev => ({
-              ...prev,
-              name: prev.name || info.name || prev.name,
-              description: prev.description || info.description || prev.description,
-            }));
-          }
-        }
-      } catch (err) {
-        console.error('自动获取站点信息失败:', err);
-      }
-    }
+    await fetchSiteInfo(url);
   };
+
+  // 打开弹窗时，如果 URL 存在但信息不全，尝试自动获取
+  useEffect(() => {
+    if (open && formData.url && (!formData.name || !formData.description)) {
+      // 延迟一点执行，避免和渲染冲突
+      const timer = setTimeout(() => {
+        handleUrlBlur();
+      }, 500);
+      return () => { clearTimeout(timer); };
+    }
+  }, [open]);
 
   // 点击删除按钮 (直接执行删除，不再确认)
   const handleDeleteClick = (e: React.MouseEvent) => {
@@ -277,7 +316,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
               id='name'
               name='name'
               label='网站名称'
-              required
+              // required
               fullWidth
               value={formData.name || ''}
               onChange={handleChange}
@@ -300,6 +339,13 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
               variant='outlined'
               size='small'
               type='url'
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    {fetchingInfo && <Typography variant="caption" color="text.secondary">获取信息中...</Typography>}
+                  </InputAdornment>
+                ),
+              }}
             />
 
             {/* 网站图标 */}
@@ -497,7 +543,12 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
             >
               取消
             </Button>
-            <Button type='submit' color='primary' variant='contained' startIcon={<SaveIcon />}>
+            <Button
+              type='submit'
+              color='primary'
+              variant='contained'
+              startIcon={<SaveIcon />}
+            >
               保存
             </Button>
           </Box>

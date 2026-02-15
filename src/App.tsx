@@ -333,31 +333,34 @@ function App() {
         setIsAuthenticated(false);
         setIsAuthRequired(false);
         setViewMode('readonly');
+        // 未认证时不自动加载数据，显示访客主页
+        setGroups([]);
+        localStorage.removeItem(CACHE_DATA_KEY);
       } else {
         // 已认证，设置为编辑模式
         api.isAuthenticated = true; // 同步 API 客户端状态
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
-        setUsername('admin');
-      }
+        setUsername('admin'); // 这里可以优化为从 result 获取
 
-      // 统一在认证状态确定后加载业务数据
-      await fetchData();
+        // 只有且仅当认证成功后，才加载业务数据
+        await fetchData();
+      }
 
     } catch (error) {
       console.error('认证检查及数据加载流程失败:', error);
       setIsAuthenticated(false);
       setIsAuthRequired(false);
       setViewMode('readonly');
-
-      // 容错处理：尝试加载公开数据
-      await fetchData().catch(e => console.error('最终业务负载失败:', e));
+      setGroups([]); // 出错也视为访客模式，清空数据以显示 VisitorHome
+      localStorage.removeItem(CACHE_DATA_KEY);
     } finally {
       setIsAuthChecking(false);
       setLoading(false); // 确保 loading 也会关闭
     }
   };
+
 
   // 登录功能
   const handleLogin = async (username: string, password: string, rememberMe: boolean = false) => {
@@ -469,11 +472,11 @@ function App() {
     setIsAuthRequired(false); // 允许继续以访客身份访问
     setViewMode('readonly'); // 切换到只读模式
 
-    // 重新加载数据（仅公开内容）
-    await fetchData();
-    await fetchConfigs();
-
-
+    // 登出后清空数据，显示访客主页
+    setGroups([]);
+    localStorage.removeItem(CACHE_DATA_KEY);
+    // await fetchData(); // 不再加载公开数据
+    await fetchConfigs(); // 配置可能需要重置（如标题等）
   };
 
   // 加载配置
@@ -511,8 +514,7 @@ function App() {
         await Promise.allSettled([
           fetchConfigs(),
           api.initDB(),
-          checkAuthStatus(),
-          fetchData()
+          checkAuthStatus()
         ]);
 
       } catch (error) {
@@ -617,8 +619,8 @@ function App() {
 
       setGroups(groupsWithSites);
 
-      // 只有在只读模式下才缓存业务数据
-      if (viewMode === 'readonly') {
+      // 只有在已认证模式下才缓存业务数据
+      if (isAuthenticated) {
         saveToCache(CACHE_DATA_KEY, groupsWithSites);
       }
     } catch (error) {
@@ -734,6 +736,13 @@ function App() {
         }));
 
         handleSuccess('书签更新成功');
+
+        // 检查是否需要后台补全
+        // 启发式规则：如果名称等于 URL 的域名，且描述为空，则认为是“占位符”状态，尝试补全
+        const domain = extractDomain(updatedSite.url);
+        if (updatedSite.name === domain && !updatedSite.description) {
+          enrichSiteInBackground(updatedSite.id, updatedSite.url);
+        }
       }
     } catch (error) {
       console.error('更新站点失败:', error);
@@ -1275,14 +1284,63 @@ function App() {
     });
   };
 
+  // 后台补充站点信息
+  const enrichSiteInBackground = async (siteId: number, url: string) => {
+    try {
+      console.log(`[后台补全] 开始获取信息: ${url}`);
+      const info = await api.fetchSiteInfo(url) as any;
+
+      if (info.success && (info.name || info.description || info.icon)) {
+        console.log(`[后台补全] 获取成功:`, info.name);
+
+        // 构建更新对象，只更新有值的字段
+        const updates: Partial<Site> = {};
+        if (info.name) updates.name = info.name;
+        if (info.description) updates.description = info.description;
+        // 如果原有图标是默认的 faviconextractor，尝试替换为更精准的图标
+        if (info.icon) updates.icon = info.icon;
+
+        if (Object.keys(updates).length > 0) {
+          await api.updateSite(siteId, updates);
+
+          // 更新本地状态 - 仅更新该站点
+          setGroups(prevGroups => prevGroups.map(group => {
+            // 找到包含该站点的组
+            if (group.sites.some(s => s.id === siteId)) {
+              return {
+                ...group,
+                sites: group.sites.map(s => s.id === siteId ? { ...s, ...updates } : s)
+              };
+            }
+            return group;
+          }));
+        }
+      }
+    } catch (error) {
+      console.warn(`[后台补全] 失败:`, error);
+    }
+  };
+
   const handleCreateSite = async () => {
     try {
-      if (!newSite.name || !newSite.url) {
-        handleError('站点名称和URL不能为空');
+      if (!newSite.url) {
+        handleError('站点URL不能为空');
         return;
       }
 
-      const createdSite = await api.createSite(newSite as Site);
+      // 如果没有名称，使用域名
+      let finalName = newSite.name;
+      if (!finalName) {
+        finalName = extractDomain(newSite.url) || 'New Site';
+      }
+
+      // 准备提交的数据
+      const siteToCreate = {
+        ...newSite,
+        name: finalName
+      };
+
+      const createdSite = await api.createSite(siteToCreate as Site);
 
       // 局部更新本地状态，避免 fetchData 全量刷新
       if (createdSite && createdSite.id) {
@@ -1296,6 +1354,11 @@ function App() {
           return group;
         }));
         handleSuccess('书签创建成功');
+
+        // 如果用户没填名称或描述，触发后台补全
+        if (!newSite.name || !newSite.description) {
+          enrichSiteInBackground(createdSite.id, createdSite.url);
+        }
       }
 
       handleCloseAddSite();
@@ -2628,6 +2691,7 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         groups={groups}
         iconApi={configs['site.iconApi']}
+        api={api}
       />
     </ThemeProvider >
   );
