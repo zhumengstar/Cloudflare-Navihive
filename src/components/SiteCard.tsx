@@ -21,8 +21,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 
 interface SiteCardProps {
   site: Site;
-  onUpdate: (updatedSite: Site) => void;
-  onDelete: (siteId: number) => void;
+  onUpdate?: (updatedSite: Site) => void;
+  onDelete?: (siteId: number) => void;
   onSiteClick?: (siteId: number) => void; // 新增：点击回调
   isEditMode?: boolean;
   viewMode?: 'readonly' | 'edit'; // 访问模式
@@ -37,13 +37,13 @@ interface SiteCardProps {
 // 使用memo包装组件以减少不必要的重渲染
 const SiteCard = memo(function SiteCard({
   site,
-  onUpdate,
-  onDelete,
+  // onUpdate,
+  // onDelete,
   onSiteClick,
   isEditMode = false,
   viewMode = 'edit', // 默认为编辑模式
   index = 0,
-  iconApi, // 添加iconApi参数
+  // iconApi,
   isBatchMode = false,
   isSelected = false,
   onToggleSelection,

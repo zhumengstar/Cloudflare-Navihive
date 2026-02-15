@@ -253,6 +253,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
       }, 500);
       return () => { clearTimeout(timer); };
     }
+    return undefined;
   }, [open]);
 
   // 点击删除按钮 (直接执行删除，不再确认)
