@@ -126,7 +126,6 @@ import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import WarningIcon from '@mui/icons-material/Warning';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
-import RefreshIcon from '@mui/icons-material/Refresh';
 
 // 根据环境选择使用真实API还是模拟API
 // @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
@@ -479,6 +478,8 @@ function App() {
         setIsAuthRequired(false);
         setViewMode('edit');
         setUsername(username);
+        // 根据用户指示，只有 admin 是管理员
+        setIsAdmin(username === 'admin');
         setIsLoginOpen(false);
         setLoginLoading(false);
 
@@ -600,6 +601,12 @@ function App() {
     setViewMode('readonly'); // 切换到只读模式
 
     // 登出后清空数据，显示访客主页
+    // 关键修复：登出时必须取消正在进行的导入任务
+    isImportCancelled.current = true;
+    clearImportTask();
+    setImportLoading(false);
+    setChromeImportProgress(0);
+
     setGroups([]);
     localStorage.removeItem(CACHE_DATA_KEY);
     // await fetchData(); // 不再加载公开数据
@@ -1390,9 +1397,15 @@ function App() {
 
   // 后台补充站点信息
   const enrichSiteInBackground = async (siteId: number, url: string) => {
+    // 如果未认证或导入已取消，直接返回
+    if (!isAuthenticated || isImportCancelled.current) return;
+
     try {
       console.log(`[后台补全] 开始获取信息: ${url}`);
       const info = await api.fetchSiteInfo(url) as any;
+
+      // 再次检查状态，因为 fetchSiteInfo 是异步的
+      if (!isAuthenticated || isImportCancelled.current) return;
 
       if (info.success && (info.name || info.description || info.icon)) {
         console.log(`[后台补全] 获取成功:`, info.name);
@@ -1407,17 +1420,23 @@ function App() {
         if (Object.keys(updates).length > 0) {
           await api.updateSite(siteId, updates);
 
+          // 再次检查状态
+          if (!isAuthenticated || isImportCancelled.current) return;
+
           // 更新本地状态 - 仅更新该站点
-          setGroups(prevGroups => prevGroups.map(group => {
-            // 找到包含该站点的组
-            if (group.sites.some(s => s.id === siteId)) {
-              return {
-                ...group,
-                sites: group.sites.map(s => s.id === siteId ? { ...s, ...updates } : s)
-              };
-            }
-            return group;
-          }));
+          setGroups(prevGroups => {
+            const newGroups = prevGroups.map(group => {
+              // 找到包含该站点的组
+              if (group.sites.some(s => s.id === siteId)) {
+                return {
+                  ...group,
+                  sites: group.sites.map(s => s.id === siteId ? { ...s, ...updates } : s)
+                };
+              }
+              return group;
+            });
+            return newGroups;
+          });
         }
       }
     } catch (error) {
@@ -2289,6 +2308,8 @@ function App() {
                     onOpenAddGroup={handleOpenAddGroup}
                     configs={configs}
                     onUpdateConfigs={handleUpdateConfigs}
+                    onBatchUpdateIcons={handleBatchUpdateIcons}
+                    onResetData={() => setClearDataConfirmOpen(true)}
                     api={api}
                   />
                 </Suspense>
@@ -2853,40 +2874,6 @@ function App() {
                   placeholder='/* 自定义样式 */\nbody { }'
                 />
 
-                <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                  <Typography variant="subtitle2" color="error" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <WarningIcon fontSize="small" /> 危险区域
-                  </Typography>
-                  <Stack spacing={2}>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      fullWidth
-                      startIcon={<RefreshIcon />}
-                      onClick={handleBatchUpdateIcons}
-                      disabled={importLoading}
-                      sx={{ borderRadius: 2 }}
-                    >
-                      批量更新所有图标
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      fullWidth
-                      startIcon={<DeleteSweepIcon />}
-                      onClick={() => {
-                        setOpenConfig(false);
-                        setClearDataConfirmOpen(true);
-                      }}
-                      sx={{ borderRadius: 2, borderStyle: 'dashed' }}
-                    >
-                      重置系统数据
-                    </Button>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-                    清空所有分组和书签，系统将恢复到初始状态
-                  </Typography>
-                </Box>
               </Stack>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3 }}>

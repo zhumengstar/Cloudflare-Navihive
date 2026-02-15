@@ -1,5 +1,5 @@
 // src/components/SiteCard.tsx
-import { useState, memo } from 'react';
+import { useState, memo, useEffect } from 'react';
 import { Site } from '../API/http';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -51,6 +51,12 @@ const SiteCard = memo(function SiteCard({
 }: SiteCardProps) {
   const [iconError, setIconError] = useState(!site.icon);
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  // 当 site.icon 更新时，重置错误状态，确保新图标能尝试加载
+  useEffect(() => {
+    setIconError(!site.icon);
+    setImageLoaded(false);
+  }, [site.icon]);
 
   // 使用dnd-kit的useSortable hook
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({

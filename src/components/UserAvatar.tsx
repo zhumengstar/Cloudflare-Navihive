@@ -38,6 +38,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 const RecycleBin = React.lazy(() => import('./RecycleBin'));
 import { Site } from '../API/http';
 
@@ -54,6 +55,8 @@ interface UserAvatarProps {
     onOpenAddGroup: () => void;
     configs: Record<string, string>;
     onUpdateConfigs: (newConfigs: Record<string, string>) => Promise<void>;
+    onBatchUpdateIcons: () => void;
+    onResetData: () => void;
     isAdmin?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     api: any;
@@ -72,6 +75,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     onOpenAddGroup,
     configs,
     onUpdateConfigs,
+    onBatchUpdateIcons,
+    onResetData,
     isAdmin,
     api
 }) => {
@@ -349,48 +354,59 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         <ListItemText>修改密码</ListItemText>
                     </MenuItem>
                 )}
+                <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onOpenAddGroup(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <CreateNewFolderIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>新增分组</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <SortIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>分组排序</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <SwapHorizIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>书签拖动</ListItemText>
+                </MenuItem>
                 {isAdmin && (
-                    <>
-                        <Divider />
-                        <MenuItem onClick={() => { handleMenuClose(); onOpenAddGroup(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <CreateNewFolderIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>新增分组</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={() => { handleMenuClose(); onStartGroupSort(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <SortIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>分组排序</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={() => { handleMenuClose(); onStartCrossGroupDrag(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <SwapHorizIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>书签拖动</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <SettingsIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>网站设置</ListItemText>
-                        </MenuItem>
-                        <Divider />
-                        <MenuItem onClick={() => { handleMenuClose(); onExportData(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <FileDownloadIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>导出数据</ListItemText>
-                        </MenuItem>
-                        <MenuItem onClick={() => { handleMenuClose(); onOpenImport(); }} sx={menuItemSx}>
-                            <ListItemIcon>
-                                <FileUploadIcon fontSize='small' />
-                            </ListItemIcon>
-                            <ListItemText>导入数据</ListItemText>
-                        </MenuItem>
-                    </>
+                    <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }} sx={menuItemSx}>
+                        <ListItemIcon>
+                            <SettingsIcon fontSize='small' />
+                        </ListItemIcon>
+                        <ListItemText>网站设置</ListItemText>
+                    </MenuItem>
                 )}
+                <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onExportData(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <FileDownloadIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>导出数据</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onOpenImport(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <FileUploadIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>导入数据</ListItemText>
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={() => { handleMenuClose(); onBatchUpdateIcons(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <AutoFixHighIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>批量更新图标</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { handleMenuClose(); onResetData(); }} sx={{ color: 'error.main', ...menuItemSx }}>
+                    <ListItemIcon sx={{ color: 'error.main' }}>
+                        <DeleteSweepIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>重置所有数据</ListItemText>
+                </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogoutClick} sx={{ color: 'error.main', ...menuItemSx }}>
                     <ListItemIcon sx={{ color: 'error.main' }}>
