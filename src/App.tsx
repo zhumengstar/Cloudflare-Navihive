@@ -2067,10 +2067,6 @@ function App() {
 
   // 批量更新所有站点图标
   const handleBatchUpdateIcons = async () => {
-    if (!window.confirm('确定要更新所有站点的图标吗？这会将所有现有图标 URL 替换为当前设置的 API 格式。')) {
-      return;
-    }
-
     try {
       setImportLoading(true); // 使用现有加载状态作为反馈
       const result = await api.batchUpdateIcons();
