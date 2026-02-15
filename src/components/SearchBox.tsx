@@ -49,6 +49,8 @@ interface SearchBoxProps {
   sites: Site[];
   onInternalResultClick?: (result: SearchResultItem) => void;
   onDelete?: (id: number) => void;
+  onEditGroup?: (id: number) => void;
+  onMoveSite?: (siteId: number) => void;
 }
 
 type SearchMode = 'internal' | 'external';
@@ -58,6 +60,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   sites,
   onInternalResultClick,
   onDelete,
+  onEditGroup,
+  onMoveSite,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -425,6 +429,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           query={query}
           onResultClick={handleResultClick}
           onDelete={handleLocalDelete}
+          onEditGroup={onEditGroup}
+          onMoveSite={onMoveSite}
           open={showResults}
         />
       )}

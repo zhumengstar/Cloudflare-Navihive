@@ -29,6 +29,8 @@ interface SearchResultPanelProps {
   query: string;
   onResultClick: (result: SearchResultItem) => void;
   onDelete?: (id: number) => void;
+  onEditGroup?: (id: number) => void;
+  onMoveSite?: (siteId: number) => void;
   open: boolean;
 }
 
@@ -37,6 +39,8 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
   query,
   onResultClick,
   onDelete,
+  onEditGroup,
+  onMoveSite,
   open,
 }) => {
   const showPanel = open && !!query && results.length > 0;
@@ -97,7 +101,13 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
               <React.Fragment key={`${result.type}-${result.id}`}>
                 {index > 0 && <Divider />}
                 <ListItem disablePadding>
-                  <ListItemButton onClick={() => onResultClick(result)}>
+                  <ListItemButton onClick={() => {
+                    if (result.type === 'group' && onEditGroup) {
+                      onEditGroup(result.id);
+                    } else {
+                      onResultClick(result);
+                    }
+                  }}>
                     <Box
                       sx={{
                         display: 'flex',
@@ -150,12 +160,34 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
                           secondary={
                             <Box sx={{ mt: 0.5 }}>
                               {result.type === 'site' && result.groupName && (
-                                <Typography
-                                  variant='caption'
-                                  sx={{ color: 'text.secondary', display: 'block' }}
-                                >
-                                  分组: {result.groupName}
-                                </Typography>
+                                <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <Typography
+                                    variant='caption'
+                                    sx={{ color: 'text.secondary' }}
+                                  >
+                                    分组:
+                                  </Typography>
+                                  <Typography
+                                    variant='caption'
+                                    sx={{
+                                      color: 'text.secondary',
+                                      cursor: 'pointer',
+                                      '&:hover': {
+                                        color: 'primary.main',
+                                        textDecoration: 'underline',
+                                      },
+                                    }}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (onMoveSite) {
+                                        onMoveSite(result.id);
+                                      }
+                                    }}
+                                  >
+                                    {result.groupName}
+                                  </Typography>
+                                </Box>
                               )}
                               {result.url && (
                                 <Typography

@@ -13,6 +13,8 @@ const VisitorHome = lazy(() => import('./components/VisitorHome'));
 const UserAvatar = lazy(() => import('./components/UserAvatar'));
 import SearchBox from './components/SearchBox';
 const AIChatPanel = lazy(() => import('./components/AIChatPanel'));
+import EditGroupDialog from './components/EditGroupDialog';
+import SiteSettingsModal from './components/SiteSettingsModal';
 
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
 import { SearchResultItem } from './utils/search';
@@ -297,6 +299,8 @@ function App() {
   const [draggedSiteId, setDraggedSiteId] = useState<string | null>(null);
   const [activeSite, setActiveSite] = useState<Site | null>(null);
   const [dragStartGroupId, setDragStartGroupId] = useState<number | null>(null);
+  const [groupToEdit, setGroupToEdit] = useState<Group | null>(null);
+  const [siteToSettings, setSiteToSettings] = useState<Site | null>(null);
 
   // 菜单打开关闭
   // 检查认证状态
@@ -1627,17 +1631,14 @@ function App() {
   };
 
   // 打开站点设置时刷新数据
-  const handleSiteSettingsOpen = async (siteId: number) => {
-    try {
-      const updatedSite = await api.getSite(siteId);
-      if (updatedSite) {
-        setGroups(prev => prev.map(group => ({
-          ...group,
-          sites: group.sites.map(site => site.id === siteId ? updatedSite : site)
-        })));
+  const handleSiteSettingsOpen = (siteId: number) => {
+    // 遍历所有分组查找站点
+    for (const group of groups) {
+      const site = group.sites.find(s => s.id === siteId);
+      if (site) {
+        setSiteToSettings(site);
+        break;
       }
-    } catch (error) {
-      console.warn('刷新站点数据失败:', error);
     }
   };
 
@@ -1910,6 +1911,13 @@ function App() {
                       groups={groups}
                       sites={groups.flatMap((g) => g.sites || [])}
                       onDelete={isAuthenticated ? handleSiteDelete : undefined}
+                      onEditGroup={(id) => {
+                        const group = groups.find(g => g.id === id);
+                        if (group) setGroupToEdit(group);
+                      }}
+                      onMoveSite={(siteId) => {
+                        handleSiteSettingsOpen(siteId);
+                      }}
                       onInternalResultClick={(result: SearchResultItem) => {
                         // 可选：滚动到对应的元素
                         if (result.type === 'group') {
@@ -2633,6 +2641,41 @@ function App() {
             }}
           />
         </Suspense>
+      )}
+
+      {/* 搜索结果触发的分组编辑对话框 */}
+      {groupToEdit && (
+        <EditGroupDialog
+          open={!!groupToEdit}
+          group={groupToEdit}
+          onClose={() => setGroupToEdit(null)}
+          onSave={(updated) => {
+            handleGroupUpdate(updated);
+            setGroupToEdit(null);
+          }}
+          onDelete={(id) => {
+            handleGroupDelete(id);
+            setGroupToEdit(null);
+          }}
+        />
+      )}
+
+      {/* 站点设置对话框 */}
+      {siteToSettings && (
+        <SiteSettingsModal
+          site={siteToSettings}
+          onUpdate={(updated) => {
+            handleSiteUpdate(updated);
+            setSiteToSettings(null);
+          }}
+          onDelete={(id) => {
+            handleSiteDelete(id);
+            setSiteToSettings(null);
+          }}
+          onClose={() => setSiteToSettings(null)}
+          groups={groups}
+          iconApi={configs['site.iconApi']}
+        />
       )}
     </ThemeProvider>
   );

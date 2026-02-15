@@ -1,7 +1,6 @@
 // src/components/SiteCard.tsx
-import { useState, memo, lazy, Suspense } from 'react';
+import { useState, memo } from 'react';
 import { Site } from '../API/http';
-const SiteSettingsModal = lazy(() => import('./SiteSettingsModal'));
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 // 引入Material UI组件
@@ -50,7 +49,6 @@ const SiteCard = memo(function SiteCard({
   onToggleSelection,
   onSettingsOpen,
 }: SiteCardProps) {
-  const [showSettings, setShowSettings] = useState(false);
   const [iconError, setIconError] = useState(!site.icon);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -78,13 +76,8 @@ const SiteCard = memo(function SiteCard({
     if (onSettingsOpen && site.id) {
       onSettingsOpen(site.id);
     }
-    setShowSettings(true);
   };
 
-  // 处理关闭设置
-  const handleCloseSettings = () => {
-    setShowSettings(false);
-  };
 
   // 处理卡片点击
   const handleCardClick = () => {
@@ -526,43 +519,13 @@ const SiteCard = memo(function SiteCard({
 
   if (isEditMode) {
     return (
-      <>
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-          {cardContent}
-        </div>
-
-        {showSettings && (
-          <Suspense fallback={null}>
-            <SiteSettingsModal
-              site={site}
-              onUpdate={onUpdate}
-              onDelete={onDelete}
-              onClose={handleCloseSettings}
-              iconApi={iconApi} // 传递iconApi给SiteSettingsModal
-            />
-          </Suspense>
-        )}
-      </>
+      <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+        {cardContent}
+      </div>
     );
   }
 
-  return (
-    <>
-      {cardContent}
-
-      {showSettings && (
-        <Suspense fallback={null}>
-          <SiteSettingsModal
-            site={site}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onClose={handleCloseSettings}
-            iconApi={iconApi} // 传递iconApi给SiteSettingsModal
-          />
-        </Suspense>
-      )}
-    </>
-  );
+  return cardContent;
 });
 
 export default SiteCard;
