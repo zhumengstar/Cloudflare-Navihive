@@ -595,18 +595,19 @@ function App() {
 
   // 登出功能
   const handleLogout = async () => {
+    // 强制取消正在进行的导入任务
+    isImportCancelled.current = true;
+    setImportLoading(false);
+    setChromeImportProgress(0);
+    clearImportTask();
+
     await api.logout();
     setIsAuthenticated(false);
+    setIsAdmin(false); // 显式重置管理员权限
     setIsAuthRequired(false); // 允许继续以访客身份访问
     setViewMode('readonly'); // 切换到只读模式
 
     // 登出后清空数据，显示访客主页
-    // 关键修复：登出时必须取消正在进行的导入任务
-    isImportCancelled.current = true;
-    clearImportTask();
-    setImportLoading(false);
-    setChromeImportProgress(0);
-
     setGroups([]);
     localStorage.removeItem(CACHE_DATA_KEY);
     // await fetchData(); // 不再加载公开数据
@@ -1397,15 +1398,9 @@ function App() {
 
   // 后台补充站点信息
   const enrichSiteInBackground = async (siteId: number, url: string) => {
-    // 如果未认证或导入已取消，直接返回
-    if (!isAuthenticated || isImportCancelled.current) return;
-
     try {
       console.log(`[后台补全] 开始获取信息: ${url}`);
       const info = await api.fetchSiteInfo(url) as any;
-
-      // 再次检查状态，因为 fetchSiteInfo 是异步的
-      if (!isAuthenticated || isImportCancelled.current) return;
 
       if (info.success && (info.name || info.description || info.icon)) {
         console.log(`[后台补全] 获取成功:`, info.name);
@@ -1419,9 +1414,6 @@ function App() {
 
         if (Object.keys(updates).length > 0) {
           await api.updateSite(siteId, updates);
-
-          // 再次检查状态
-          if (!isAuthenticated || isImportCancelled.current) return;
 
           // 更新本地状态 - 仅更新该站点
           setGroups(prevGroups => {
