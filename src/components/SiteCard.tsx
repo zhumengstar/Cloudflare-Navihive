@@ -213,13 +213,21 @@ const SiteCard = memo(function SiteCard({
                 title={site.name}
                 arrow
                 placement="top"
+                enterDelay={300}
+                leaveDelay={200}
+                disableInteractive={false}
                 componentsProps={{
                   tooltip: {
                     sx: {
                       fontSize: '1rem',
                       lineHeight: 1.5,
-                      p: 1
-                    }
+                      p: 1,
+                      cursor: 'text',
+                      userSelect: 'text',
+                      pointerEvents: 'auto'
+                    },
+                    onMouseDown: (e: any) => e.stopPropagation(),
+                    onClick: (e: any) => e.stopPropagation(),
                   }
                 }}
               >
@@ -244,20 +252,41 @@ const SiteCard = memo(function SiteCard({
             </Box>
 
             {/* 描述 */}
-            <Typography
-              variant='body2'
-              color='text.secondary'
-              sx={{
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                flexGrow: 1,
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+            <Tooltip
+              title={site.description && site.description !== site.name ? site.description : ""}
+              arrow
+              placement="top"
+              enterDelay={300}
+              leaveDelay={200}
+              disableInteractive={false}
+              disableHoverListener={!site.description || site.description === site.name}
+              componentsProps={{
+                tooltip: {
+                  sx: {
+                    cursor: 'text',
+                    userSelect: 'text',
+                    pointerEvents: 'auto'
+                  },
+                  onMouseDown: (e: any) => e.stopPropagation(),
+                  onClick: (e: any) => e.stopPropagation(),
+                }
               }}
             >
-              {site.description || '暂无描述'}
-            </Typography>
+              <Typography
+                variant='body2'
+                color='text.secondary'
+                sx={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  flexGrow: 1,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                }}
+              >
+                {site.description || '暂无描述'}
+              </Typography>
+            </Tooltip>
           </Box>
         ) : (
           <>
@@ -355,13 +384,21 @@ const SiteCard = memo(function SiteCard({
                     title={site.name}
                     arrow
                     placement="top"
+                    enterDelay={300}
+                    leaveDelay={200}
+                    disableInteractive={false}
                     componentsProps={{
                       tooltip: {
                         sx: {
                           fontSize: '1rem',
                           lineHeight: 1.5,
-                          p: 1
-                        }
+                          p: 1,
+                          cursor: 'text',
+                          userSelect: 'text',
+                          pointerEvents: 'auto'
+                        },
+                        onMouseDown: (e: any) => e.stopPropagation(),
+                        onClick: (e: any) => e.stopPropagation(),
                       }
                     }}
                   >
@@ -385,20 +422,41 @@ const SiteCard = memo(function SiteCard({
                 </Box>
 
                 {/* 描述 */}
-                <Typography
-                  variant='body2'
-                  color='text.secondary'
-                  sx={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    flexGrow: 1,
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                <Tooltip
+                  title={site.description && site.description !== site.name ? site.description : ""}
+                  arrow
+                  placement="top"
+                  enterDelay={300}
+                  leaveDelay={200}
+                  disableInteractive={false}
+                  disableHoverListener={!site.description || site.description === site.name}
+                  componentsProps={{
+                    tooltip: {
+                      sx: {
+                        cursor: 'text',
+                        userSelect: 'text',
+                        pointerEvents: 'auto'
+                      },
+                      onMouseDown: (e: any) => e.stopPropagation(),
+                      onClick: (e: any) => e.stopPropagation(),
+                    }
                   }}
                 >
-                  {site.description || '暂无描述'}
-                </Typography>
+                  <Typography
+                    variant='body2'
+                    color='text.secondary'
+                    sx={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      flexGrow: 1,
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    }}
+                  >
+                    {site.description || '暂无描述'}
+                  </Typography>
+                </Tooltip>
               </CardContent>
             </CardActionArea>
 

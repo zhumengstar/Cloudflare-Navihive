@@ -164,6 +164,54 @@ export default function SiteSettingsModal({
     onClose();
   };
 
+  // 自动获取站点信息
+  const handleUrlBlur = async () => {
+    if (!formData.url) return;
+
+    let url = formData.url.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+      setFormData(prev => ({ ...prev, url }));
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      return;
+    }
+
+    // 1. 自动获取图标 (保持现有逻辑)
+    const domain = extractDomain(url);
+    if (domain) {
+      const actualIconApi = iconApi || 'https://www.faviconextractor.com/favicon/{domain}?larger=true';
+      const iconUrl = actualIconApi.replace('{domain}', domain);
+      if (!formData.icon) {
+        setFormData(prev => ({ ...prev, icon: iconUrl }));
+        setIconPreview(iconUrl);
+      }
+    }
+
+    // 2. 自动获取标题和描述
+    // 只有当名称或描述为空时才自动填充，避免覆盖用户的手动输入
+    if (!formData.name || !formData.description) {
+      try {
+        const client = (window as any).apiClient; // 假设 apiClient 已在全局或通过 props 注入
+        if (client && typeof client.fetchSiteInfo === 'function') {
+          const info = await client.fetchSiteInfo(url);
+          if (info.success) {
+            setFormData(prev => ({
+              ...prev,
+              name: prev.name || info.name || prev.name,
+              description: prev.description || info.description || prev.description,
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('自动获取站点信息失败:', err);
+      }
+    }
+  };
+
   // 点击删除按钮 (直接执行删除，不再确认)
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -243,6 +291,7 @@ export default function SiteSettingsModal({
               fullWidth
               value={formData.url || ''}
               onChange={handleChange}
+              onBlur={handleUrlBlur}
               placeholder='https://example.com'
               variant='outlined'
               size='small'

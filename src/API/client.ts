@@ -462,4 +462,18 @@ export class NavigationClient {
       };
     }
   }
+
+  // 获取站点元数据 (标题和描述)
+  async fetchSiteInfo(url: string): Promise<{ success: boolean; name?: string; description?: string; message?: string; deadLink?: boolean }> {
+    try {
+      return await this.request(`utils/fetch-site-info?url=${encodeURIComponent(url)}`);
+    } catch (error) {
+      console.error('获取站点信息失败:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : '获取站点信息失败',
+        deadLink: true, // 网络层面的错误通常意味着不可达
+      };
+    }
+  }
 }

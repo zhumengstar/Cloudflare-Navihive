@@ -719,4 +719,15 @@ export class MockNavigationClient {
 
     return { success: true, reply };
   }
+
+  // 模拟获取站点信息
+  async fetchSiteInfo(url: string): Promise<{ success: boolean; name?: string; description?: string; message?: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log('模拟获取站点信息:', url);
+    return {
+      success: true,
+      name: '模拟站点名称',
+      description: '这是一个模拟的站点描述，用于开发环境调试。',
+    };
+  }
 }

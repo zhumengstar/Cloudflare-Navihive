@@ -1226,6 +1226,87 @@ export default {
                     const result = await api.importData(data as ExportData);
                     return createJsonResponse(result, request);
                 }
+                // 获取站点信息 (标题和描述)
+                else if (path === "utils/fetch-site-info" && method === "GET") {
+                    if (!isAuthenticated) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+
+                    const targetUrl = url.searchParams.get("url");
+                    if (!targetUrl) {
+                        return createJsonResponse({ success: false, message: "参数 url 不能为空" }, request, { status: 400 });
+                    }
+
+                    try {
+                        let fetchResponse;
+                        try {
+                            fetchResponse = await fetch(targetUrl, {
+                                headers: {
+                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                                },
+                                redirect: "follow",
+                                // 设置较短的超时时间，避免 Worker 无限等待
+                                signal: AbortSignal.timeout(10000)
+                            });
+                        } catch (fetchErr) {
+                            console.error(`Fetch failed for ${targetUrl}:`, fetchErr);
+                            return createJsonResponse({
+                                success: false,
+                                message: "站点无法访问",
+                                deadLink: true
+                            }, request, { status: 400 });
+                        }
+
+                        if (!fetchResponse.ok) {
+                            return createJsonResponse({
+                                success: false,
+                                message: `站点返回错误: ${fetchResponse.status}`,
+                                deadLink: fetchResponse.status >= 400 && fetchResponse.status < 600
+                            }, request, { status: 400 });
+                        }
+
+                        let title = "";
+                        let description = "";
+
+                        // 使用 HTMLRewriter 提取信息
+                        const rewriter = new HTMLRewriter()
+                            .on("title", {
+                                text(t) {
+                                    title += t.text;
+                                }
+                            })
+                            .on("meta[name='description']", {
+                                element(e) {
+                                    description = e.getAttribute("content") || "";
+                                }
+                            })
+                            .on("meta[name='Description']", {
+                                element(e) {
+                                    if (!description) description = e.getAttribute("content") || "";
+                                }
+                            })
+                            .on("meta[property='og:title']", {
+                                element(e) {
+                                    if (!title) title = e.getAttribute("content") || "";
+                                }
+                            })
+                            .on("meta[property='og:description']", {
+                                element(e) {
+                                    if (!description) description = e.getAttribute("content") || "";
+                                }
+                            });
+
+                        await rewriter.transform(fetchResponse).arrayBuffer();
+
+                        return createJsonResponse({
+                            success: true,
+                            name: title.trim().slice(0, 100),
+                            description: description.trim().slice(0, 500)
+                        }, request);
+                    } catch (e) {
+                        return createJsonResponse({ success: false, message: `抓取失败: ${e instanceof Error ? e.message : '未知错误'}` }, request, { status: 500 });
+                    }
+                }
 
                 // AI 智能问答路由
                 else if (path === "chat" && method === "POST") {

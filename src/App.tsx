@@ -627,12 +627,82 @@ function App() {
       }
 
       // 如果因为认证问题导致加载失败，处理认证状态
-      if (error instanceof Error && error.message.includes('认证')) {
-        setIsAuthRequired(true);
-        setIsAuthenticated(false);
-      }
     } finally {
       setLoading(false);
+      // 加载完成后，如果是编辑模式且已认证，触发后台自动补全
+      if (viewMode === 'edit' && isAuthenticated) {
+        scavengeSiteInfo();
+      }
+    }
+  };
+
+  // 后台自动补全缺失的站点信息
+  const scavengeSiteInfo = async () => {
+    // 找出名称或描述为空的站点
+    const sitesToRefresh: Site[] = [];
+    groups.forEach(group => {
+      group.sites.forEach(site => {
+        if (!site.name || !site.description || site.name === site.url) {
+          sitesToRefresh.push(site);
+        }
+      });
+    });
+
+    if (sitesToRefresh.length === 0) return;
+
+    console.log(`发现 ${sitesToRefresh.length} 个站点缺少信息，准备后台补全...`);
+
+    // 逐个补全，避免并发过高
+    for (const site of sitesToRefresh) {
+      try {
+        // 再次检查是否已经补全（避免重复请求）
+        if (site.url) {
+          const info = await api.fetchSiteInfo(site.url);
+
+          if (info.deadLink) {
+            console.warn(`检测到死链，正在自动清理: ${site.url}`);
+
+            // 1. 添加自动删除备注
+            const autoNote = `系统自动识别：该网站打不开（${new Date().toLocaleString()}），已自动移动到回收站`;
+            const updatedNote = site.notes ? `${site.notes}\n\n${autoNote}` : autoNote;
+
+            // 2. 先更新备注，再删除（删除其实是移动到回收站）
+            await api.updateSite(site.id!, { notes: updatedNote });
+            await api.deleteSite(site.id!);
+
+            // 3. 同步更新本地状态，从界面移除
+            setGroups(prev => prev.map(g => ({
+              ...g,
+              sites: g.sites.filter(s => s.id !== site.id)
+            })));
+
+            handleError(`自动清理死链: ${site.name || site.url} (已移至回收站)`);
+            continue; // 继续下一个
+          }
+
+          if (info.success && (info.name || info.description)) {
+            const updatedData: Partial<Site> = {
+              name: site.name || info.name || '',
+              description: site.description || info.description || '',
+            };
+
+            // 提交更新到服务器
+            await api.updateSite(site.id!, updatedData);
+
+            // 同步更新本地状态，让 UI 实时响应
+            setGroups(prev => prev.map(g => ({
+              ...g,
+              sites: g.sites.map(s => s.id === site.id ? { ...s, ...updatedData } : s)
+            })));
+
+            console.log(`后台自动补全成功: ${site.url}`);
+          }
+        }
+        // 每个请求之间稍微停顿一下，友好访问
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (err) {
+        console.warn(`后台自动补全失败 [${site.url}]:`, err);
+      }
     }
   };
 
@@ -797,6 +867,51 @@ function App() {
     });
   };
 
+  // 辅助函数：从URL获取站点信息
+  const handleUrlBlur = async (url: string) => {
+    if (!url) return;
+
+    let targetUrl = url.trim();
+    if (!/^https?:\/\//i.test(targetUrl)) {
+      targetUrl = 'https://' + targetUrl;
+      setNewSite(prev => ({ ...prev, url: targetUrl }));
+    }
+
+    try {
+      new URL(targetUrl);
+    } catch {
+      return;
+    }
+
+    // 1. 自动获取图标
+    const domain = extractDomain(targetUrl);
+    if (domain) {
+      const config = await api.getConfigs();
+      const iconApi = config.icon_api || 'https://www.faviconextractor.com/favicon/{domain}?larger=true';
+      const iconUrl = iconApi.replace('{domain}', domain);
+      if (!newSite.icon) {
+        setNewSite(prev => ({ ...prev, icon: iconUrl }));
+      }
+    }
+
+    // 2. 自动获取标题和描述
+    if (!newSite.name || !newSite.description) {
+      try {
+        const info = await api.fetchSiteInfo(targetUrl);
+        if (info.success) {
+          setNewSite(prev => ({
+            ...prev,
+            name: prev.name || info.name || prev.name,
+            description: prev.description || info.description || prev.description,
+          }));
+        }
+      } catch (err) {
+        console.error('自动获取站点信息失败:', err);
+      }
+    }
+  };
+
+  // 提交修改分组
   // 启动跨分组拖动模式
   const startCrossGroupDrag = () => {
     console.log('开始跨分组拖动');
@@ -1981,6 +2096,7 @@ function App() {
                       variant='outlined'
                       value={newSite.url}
                       onChange={handleSiteInputChange}
+                      onBlur={(e) => handleUrlBlur(e.target.value)}
                     />
                   </Box>
                 </Box>
