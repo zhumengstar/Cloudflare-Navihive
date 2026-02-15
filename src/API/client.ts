@@ -197,9 +197,20 @@ export class NavigationClient {
     }
   }
 
-  // 获取用户信息
   async getUserProfile(): Promise<{ username: string; email: string; role: string }> {
     return this.request('user/profile');
+  }
+
+  // 获取用户邮箱（公开接口，用于密码重置）
+  async getUserEmail(username: string): Promise<string | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/email?username=${encodeURIComponent(username)}`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.email || null;
+    } catch {
+      return null;
+    }
   }
 
   // 更新用户信息

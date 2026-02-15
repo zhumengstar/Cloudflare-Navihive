@@ -462,6 +462,7 @@ export default {
                         */
 
                         const registerData = (await validateRequestBody(request)) as RegisterInput;
+                        console.log('[DEBUG] Worker received register data:', JSON.stringify(registerData));
 
                         const validation = validateRegister(registerData);
                         if (!validation.valid) {
@@ -529,6 +530,34 @@ export default {
                             },
                             request,
                             { status: 400 }
+                        );
+                    }
+                }
+
+                // 获取用户邮箱路由 (用于重置密码)
+                if (path === "auth/email" && method === "GET") {
+                    try {
+                        const url = new URL(request.url);
+                        const username = url.searchParams.get("username");
+
+                        if (!username) {
+                            return createJsonResponse(
+                                { success: false, message: '用户名不能为空' },
+                                request,
+                                { status: 400 }
+                            );
+                        }
+
+                        const email = await api.getUserEmail(username);
+                        return createJsonResponse({ email }, request);
+                    } catch (error) {
+                        return createJsonResponse(
+                            {
+                                success: false,
+                                message: error instanceof Error ? error.message : '获取邮箱失败',
+                            },
+                            request,
+                            { status: 500 }
                         );
                     }
                 }
@@ -899,6 +928,65 @@ export default {
 
                     const result = await env.DB.prepare(query).bind(...params).all();
                     return createJsonResponse(result.results || [], request);
+                } else if (path === "auth/login" && method === "POST") {
+                    const data = (await validateRequestBody(request)) as LoginRequest;
+                    const result = await api.login(data);
+
+                    // 如果登录成功，设置 HttpOnly Cookie
+                    if (result.success && result.token) {
+                        const response = createJsonResponse(result, request);
+                        // 计算过期时间
+                        const maxAge = data.rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60;
+
+                        response.headers.append(
+                            "Set-Cookie",
+                            `auth_token=${result.token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`
+                        );
+                        return response;
+                    }
+
+                    return createJsonResponse(result, request);
+                } else if (path === "auth/register" && method === "POST") {
+                    const data = (await validateRequestBody(request)) as RegisterRequest;
+
+                    // 验证注册数据
+                    if (!data.username || !data.password || !data.email) {
+                        return createJsonResponse(
+                            { success: false, message: "用户名、密码和邮箱不能为空" },
+                            request,
+                            { status: 400 }
+                        );
+                    }
+
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+                        return createJsonResponse(
+                            { success: false, message: "邮箱格式不正确" },
+                            request,
+                            { status: 400 }
+                        );
+                    }
+
+                    const result = await api.register(data);
+                    return createJsonResponse(result, request);
+                } else if (path === "auth/email" && method === "GET") {
+                    // 获取用户邮箱（用于密码重置回显）
+                    const username = url.searchParams.get("username");
+                    if (!username) {
+                        return createJsonResponse({ error: "用户名不能为空" }, request, { status: 400 });
+                    }
+
+                    const email = await api.getUserEmail(username);
+                    if (!email) {
+                        return createJsonResponse({ success: false, message: "用户不存在或未绑定邮箱" }, request);
+                    }
+
+                    return createJsonResponse({ success: true, email }, request);
+                } else if (path === "auth/send-code" && method === "POST") {
+                    const idStr = path.split("/")[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const id = parseInt(idStr);
                 } else if (path === "sites/trash" && method === "GET") {
                     const sites = await api.getTrashSites(currentUserId);
                     return createJsonResponse(sites, request);

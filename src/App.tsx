@@ -443,7 +443,11 @@ function App() {
       const result = await api.resetPassword(username, newPassword, code);
 
       if (result?.success) {
-        setResetPasswordSuccess(result.message || '密码重置成功，请返回登录');
+        setResetPasswordSuccess(result.message || '密码重置成功，正在自动登录...');
+        // 重置成功后自动登录
+        setTimeout(() => {
+          handleLogin(username, newPassword, true);
+        }, 500);
       } else {
         setResetPasswordError(result?.message || '密码重置失败');
       }
@@ -462,6 +466,16 @@ function App() {
     } catch (error) {
       console.error('发送验证码失败:', error);
       return { success: false, message: '请求失败，请稍后重试' };
+    }
+  };
+
+  // 获取用户邮箱（用于自动回显）
+  const handleGetEmail = async (username: string) => {
+    try {
+      return await api.getUserEmail(username);
+    } catch (error) {
+      console.error('获取邮箱失败:', error);
+      return null;
     }
   };
 
@@ -1592,6 +1606,7 @@ function App() {
             onRegister={handleRegister}
             onResetPassword={handleResetPassword}
             onSendCode={handleSendCode}
+            onGetEmail={handleGetEmail}
             loading={loginLoading}
             error={loginError}
             registerLoading={registerLoading}

@@ -24,8 +24,9 @@ type FormMode = 'login' | 'register' | 'resetPassword';
 interface LoginFormProps {
   onLogin: (username: string, password: string, rememberMe: boolean) => void;
   onRegister: (username: string, password: string, email: string) => void;
-  onResetPassword: (username: string, newPassword: string, code: string) => void; // 添加 code 参数
-  onSendCode: (username: string, email: string) => Promise<{ success: boolean; message?: string }>; // 新增发送验证码回调
+  onResetPassword: (username: string, newPassword: string, code: string) => void;
+  onSendCode: (username: string, email: string) => Promise<{ success: boolean; message?: string; code?: string }>;
+  onGetEmail?: (username: string) => Promise<string | null>; // 新增：获取邮箱回调
   loading?: boolean;
   error?: string | null;
   registerLoading?: boolean;
@@ -40,7 +41,8 @@ const LoginForm: React.FC<LoginFormProps> = ({
   onLogin,
   onRegister,
   onResetPassword,
-  onSendCode, // 新增
+  onSendCode,
+  onGetEmail, // 新增
   loading = false,
   error = null,
   registerLoading = false,
@@ -60,6 +62,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [codeSending, setCodeSending] = useState(false); // 发送状态
+  const [emailFetching, setEmailFetching] = useState(false); // 邮箱获取状态
   const [countdown, setCountdown] = useState(0); // 倒计时
 
   const resetForm = () => {
@@ -69,11 +72,51 @@ const LoginForm: React.FC<LoginFormProps> = ({
     setConfirmPassword('');
     setRememberMe(true);
     setLocalError(null);
+    setEmailFetching(false);
   };
 
   const switchMode = (newMode: FormMode) => {
     resetForm();
     setMode(newMode);
+  };
+
+  // 提取获取邮箱的逻辑
+  const fetchEmail = async (user: string) => {
+    if (!user || !onGetEmail) return;
+
+    setEmailFetching(true);
+    setLocalError(null);
+    try {
+      const fetchedEmail = await onGetEmail(user);
+      if (fetchedEmail) {
+        setEmail(fetchedEmail);
+        setLocalError(null);
+      } else {
+        setLocalError('未找到该用户绑定的邮箱');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setEmailFetching(false);
+    }
+  };
+
+  // 监听模式切换，如果在重置密码模式且已有用户名，自动获取邮箱
+  React.useEffect(() => {
+    if (mode === 'resetPassword' && username.trim()) {
+      fetchEmail(username.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // 用户名失去焦点时，尝试获取邮箱
+  const handleUsernameBlur = async () => {
+    if (mode === 'login' || !username.trim() || !onGetEmail) return;
+
+    // 仅在重置密码模式下（或注册模式如果需要检查是否存在）自动获取
+    if (mode === 'resetPassword') {
+      fetchEmail(username.trim());
+    }
   };
 
   // 通用校验：用户名
@@ -153,6 +196,11 @@ const LoginForm: React.FC<LoginFormProps> = ({
     try {
       const result = await onSendCode(username.trim(), email.trim());
       if (result.success) {
+        // 如果有返回验证码 (开发模式)，自动填充
+        if (result.code) {
+          setCode(result.code);
+        }
+
         setCountdown(60);
         const timer = setInterval(() => {
           setCountdown((prev) => {
@@ -287,7 +335,11 @@ const LoginForm: React.FC<LoginFormProps> = ({
             autoComplete='username'
             autoFocus
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              if (localError) setLocalError(null);
+            }}
+            onBlur={handleUsernameBlur}
             disabled={isLoading}
             sx={{ mb: 2 }}
           />
@@ -302,9 +354,16 @@ const LoginForm: React.FC<LoginFormProps> = ({
               autoComplete='email'
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={isLoading}
+              disabled={isLoading || emailFetching}
               placeholder="example@domain.com"
               sx={{ mb: 2 }}
+              InputProps={{
+                endAdornment: emailFetching ? (
+                  <InputAdornment position="end">
+                    <CircularProgress size={20} />
+                  </InputAdornment>
+                ) : null,
+              }}
             />
           )}
 
@@ -324,7 +383,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
                 variant='outlined'
                 onClick={handleSendCode}
                 disabled={codeSending || countdown > 0 || isLoading}
-                sx={{ minWidth: 100 }}
+                sx={{ minWidth: 110, whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 {countdown > 0 ? `${countdown}s` : '获取验证码'}
               </Button>

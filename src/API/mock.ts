@@ -176,6 +176,35 @@ export class MockNavigationClient {
     return false;
   }
 
+  // 获取用户信息
+  async getUserProfile(): Promise<{ username: string; email: string; role: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // 模拟返回当前用户信息
+    if (this.isAuthenticated) {
+      // 尝试解析 token Payload
+      try {
+        if (this.token) {
+          const parts = atob(this.token).split(':');
+          if (parts.length >= 1) {
+            return { username: parts[0]!, email: `${parts[0]}@example.com`, role: 'user' };
+          }
+        }
+      } catch { }
+      return { username: 'mockuser', email: 'mockuser@example.com', role: 'user' };
+    }
+    throw new Error('未登录');
+  }
+
+  // 获取用户邮箱（模拟）
+  async getUserEmail(username: string): Promise<string | null> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // 简单的模拟逻辑：如果用户名不是 admin，则返回 username@example.com
+    if (username) {
+      return `${username}@example.com`;
+    }
+    return null;
+  }
+
   async getGroups(): Promise<Group[]> {
     // 模拟网络延迟
     await new Promise((resolve) => setTimeout(resolve, 200));
