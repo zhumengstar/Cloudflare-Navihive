@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -7,44 +7,60 @@ import {
     DialogActions,
     Button,
     TextField,
-    IconButton,
     FormControlLabel,
     Switch,
-    Box,
     Typography,
-    CircularProgress
+    Box,
+    IconButton,
+    CircularProgress,
+    Alert,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { Group } from '../API/http';
 
 interface AddGroupDialogProps {
     open: boolean;
     onClose: () => void;
-    onSubmit: (name: string, isPublic: number) => Promise<boolean>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    api: any;
+    groups: Group[]; // 用于查重
+    onSuccess: () => void; // 创建成功后的回调（刷新数据等）
 }
 
 const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
     open,
     onClose,
-    onSubmit
+    api,
+    groups,
+    onSuccess,
 }) => {
     const [name, setName] = useState('');
-    const [isPublic, setIsPublic] = useState(1);
+    const [isPublic, setIsPublic] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // 每次打开时重置状态
-    useEffect(() => {
-        if (open) {
+    const handleClose = () => {
+        if (loading) return;
+        onClose();
+        // 重置状态
+        setTimeout(() => {
             setName('');
-            setIsPublic(1);
+            setIsPublic(true);
             setError(null);
-            setLoading(false);
-        }
-    }, [open]);
+        }, 200);
+    };
 
-    const handleSubmit = async () => {
+    const handleCreate = async () => {
         if (!name.trim()) {
             setError('分组名称不能为空');
+            return;
+        }
+
+        // 前端查重
+        const trimmedName = name.trim().toLowerCase();
+        const isDuplicate = groups.some(g => g.name.trim().toLowerCase() === trimmedName);
+        if (isDuplicate) {
+            setError('该分组名称已存在，请换一个名称');
             return;
         }
 
@@ -52,30 +68,34 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
         setError(null);
 
         try {
-            const success = await onSubmit(name.trim(), isPublic);
-            if (success) {
-                // 成功后由父组件关闭
-            } else {
-                // 失败通常由父组件 toast 处理，但这里也可以 set error
-                setLoading(false);
-            }
-        } catch (err) {
-            console.error(err);
-            setLoading(false);
-            setError('创建失败，请重试');
-        }
-    };
+            const newGroup: Partial<Group> = {
+                name: name.trim(),
+                is_public: isPublic ? 1 : 0,
+                order_num: groups.length + 100, // 默认放在最后
+            };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleSubmit();
+            await api.createGroup(newGroup);
+
+            // 成功
+            onSuccess(); // 这里由父组件处理提示和刷新
+            handleClose();
+        } catch (err: any) {
+            console.error('创建分组失败:', err);
+            const errorMsg = err.message || '未知错误';
+            if (errorMsg.includes('已存在')) {
+                setError('分组名称已存在');
+            } else {
+                setError('创建分组失败: ' + errorMsg);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
         <Dialog
             open={open}
-            onClose={loading ? undefined : onClose}
+            onClose={handleClose}
             maxWidth='md'
             fullWidth
             PaperProps={{
@@ -88,22 +108,28 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
         >
             <DialogTitle>
                 新增分组
-                {!loading && (
-                    <IconButton
-                        aria-label='close'
-                        onClick={onClose}
-                        sx={{
-                            position: 'absolute',
-                            right: 8,
-                            top: 8,
-                        }}
-                    >
-                        <CloseIcon />
-                    </IconButton>
-                )}
+                <IconButton
+                    aria-label='close'
+                    onClick={handleClose}
+                    sx={{
+                        position: 'absolute',
+                        right: 8,
+                        top: 8,
+                    }}
+                    disabled={loading}
+                >
+                    <CloseIcon />
+                </IconButton>
             </DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{ mb: 2 }}>请输入新分组的信息</DialogContentText>
+
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                        {error}
+                    </Alert>
+                )}
+
                 <TextField
                     autoFocus
                     margin='dense'
@@ -117,19 +143,21 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
                         setName(e.target.value);
                         if (error) setError(null);
                     }}
-                    onKeyDown={handleKeyDown}
-                    error={!!error}
-                    helperText={error}
-                    disabled={loading}
                     sx={{ mb: 2 }}
+                    disabled={loading}
+                    onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                            handleCreate();
+                        }
+                    }}
                 />
 
                 {/* 公开/私密开关 */}
                 <FormControlLabel
                     control={
                         <Switch
-                            checked={isPublic !== 0}
-                            onChange={(e) => setIsPublic(e.target.checked ? 1 : 0)}
+                            checked={isPublic}
+                            onChange={(e) => setIsPublic(e.target.checked)}
                             color='primary'
                             disabled={loading}
                         />
@@ -137,10 +165,10 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
                     label={
                         <Box>
                             <Typography variant='body1'>
-                                {isPublic !== 0 ? '公开分组' : '私密分组'}
+                                {isPublic ? '公开分组' : '私密分组'}
                             </Typography>
                             <Typography variant='caption' color='text.secondary'>
-                                {isPublic !== 0
+                                {isPublic
                                     ? '所有访客都可以看到此分组'
                                     : '只有管理员登录后才能看到此分组'}
                             </Typography>
@@ -149,11 +177,11 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
                 />
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3 }}>
-                <Button onClick={onClose} variant='outlined' disabled={loading}>
+                <Button onClick={handleClose} variant='outlined' disabled={loading}>
                     取消
                 </Button>
                 <Button
-                    onClick={handleSubmit}
+                    onClick={handleCreate}
                     variant='contained'
                     color='primary'
                     disabled={loading}
@@ -166,4 +194,4 @@ const AddGroupDialog: React.FC<AddGroupDialogProps> = ({
     );
 };
 
-export default React.memo(AddGroupDialog);
+export default AddGroupDialog;

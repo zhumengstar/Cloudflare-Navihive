@@ -12,10 +12,10 @@ import SiteCard from './components/SiteCard';
 const LoginForm = lazy(() => import('./components/LoginForm'));
 const VisitorHome = lazy(() => import('./components/VisitorHome'));
 const UserAvatar = lazy(() => import('./components/UserAvatar'));
+const AddGroupDialog = lazy(() => import('./components/AddGroupDialog'));
 import SearchBox from './components/SearchBox';
 const AIChatPanel = lazy(() => import('./components/AIChatPanel'));
-const EditGroupDialog = React.lazy(() => import('./components/EditGroupDialog'));
-const AddGroupDialog = React.lazy(() => import('./components/AddGroupDialog')); // 新增
+import EditGroupDialog from './components/EditGroupDialog';
 import SiteSettingsModal from './components/SiteSettingsModal';
 
 import { sanitizeCSS, isSecureUrl, extractDomain } from './utils/url';
@@ -286,6 +286,7 @@ function App() {
   // 新增状态管理
   const [openAddGroup, setOpenAddGroup] = useState(false);
   const [openAddSite, setOpenAddSite] = useState(false);
+  // newGroup state moved to AddGroupDialog
   const [newSite, setNewSite] = useState<Partial<Site>>({
     name: '',
     url: '',
@@ -1346,7 +1347,6 @@ function App() {
 
   // 新增分组相关函数
   const handleOpenAddGroup = () => {
-    // 移除了 setNewGroup，因为状态现在由 AddGroupDialog 内部管理
     setOpenAddGroup(true);
   };
 
@@ -1354,44 +1354,7 @@ function App() {
     setOpenAddGroup(false);
   };
 
-  // handleGroupInputChange 已移除
-
-  const handleCreateGroup = async (name: string, isPublic: number): Promise<boolean> => {
-    try {
-      if (!name) {
-        handleError('分组名称不能为空');
-        return false;
-      }
-
-      // 1. 前端先行查重（忽略大小写和空格）
-      const trimmedName = name.trim().toLowerCase();
-      const isDuplicate = groups.some(g => g.name.trim().toLowerCase() === trimmedName);
-      if (isDuplicate) {
-        handleError('该分组名称已存在，请换一个名称');
-        return false;
-      }
-
-      await api.createGroup({
-        name: name.trim(),
-        order_num: groups.length, // 或者把这个逻辑放在后端，或者前端计算
-        is_public: isPublic
-      } as Group);
-
-      await fetchData(); // 重新加载数据
-      handleCloseAddGroup();
-      handleSuccess('分组创建成功');
-      return true;
-    } catch (error) {
-      console.error('创建分组失败:', error);
-      const errorMsg = (error as Error).message;
-      if (errorMsg.includes('已存在')) {
-        handleError('分组名称已存在');
-      } else {
-        handleError('创建分组失败: ' + errorMsg);
-      }
-      return false;
-    }
-  };
+  // handleGroupInputChange and handleCreateGroup moved to AddGroupDialog
 
   // 新增站点相关函数
   const handleOpenAddSite = (groupId: number) => {
@@ -2518,15 +2481,20 @@ function App() {
           )}
 
           {/* 新增分组对话框 */}
-          <Suspense fallback={null}>
-            {openAddGroup && (
+          {openAddGroup && (
+            <Suspense fallback={null}>
               <AddGroupDialog
                 open={openAddGroup}
                 onClose={handleCloseAddGroup}
-                onSubmit={handleCreateGroup}
+                api={api}
+                groups={groups}
+                onSuccess={() => {
+                  handleSuccess('分组创建成功');
+                  fetchData();
+                }}
               />
-            )}
-          </Suspense>
+            </Suspense>
+          )}
 
           {/* 新增站点对话框 */}
           <Dialog
