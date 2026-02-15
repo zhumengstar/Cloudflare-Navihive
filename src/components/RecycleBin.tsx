@@ -327,7 +327,7 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }
                                     <ListItemText
                                         primary={
                                             <Tooltip
-                                                title={site.name}
+                                                title={`点击访问: ${site.name}`}
                                                 placement="top-start"
                                                 enterDelay={500}
                                                 slotProps={{
@@ -340,14 +340,24 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }
                                                     }
                                                 }}
                                             >
-                                                <span>
+                                                <Box
+                                                    component="span"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(site.url, '_blank');
+                                                    }}
+                                                    sx={{
+                                                        cursor: 'pointer',
+                                                        '&:hover': { textDecoration: 'underline', color: 'primary.main' }
+                                                    }}
+                                                >
                                                     <HighlightText text={site.name} highlight={searchQuery} />
-                                                </span>
+                                                </Box>
                                             </Tooltip>
                                         }
                                         secondary={
                                             <Tooltip
-                                                title={site.url}
+                                                title={`点击访问: ${site.url}`}
                                                 placement="top-start"
                                                 enterDelay={500}
                                                 slotProps={{
@@ -360,9 +370,24 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }
                                                     }
                                                 }}
                                             >
-                                                <span>
+                                                <Box
+                                                    component="span"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(site.url, '_blank');
+                                                    }}
+                                                    sx={{
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.85rem',
+                                                        display: 'inline-block',
+                                                        maxWidth: '100%',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        '&:hover': { textDecoration: 'underline', color: 'primary.main' }
+                                                    }}
+                                                >
                                                     <HighlightText text={site.url} highlight={searchQuery} />
-                                                </span>
+                                                </Box>
                                             </Tooltip>
                                         }
                                         primaryTypographyProps={{

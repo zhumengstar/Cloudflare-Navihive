@@ -231,23 +231,39 @@ const SiteCard = memo(function SiteCard({
                   }
                 }}
               >
-                <Typography
-                  variant='subtitle2'
-                  fontWeight='medium'
-                  noWrap
-                  sx={{
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                    transition: 'all 0.2s ease-in-out',
-                    cursor: 'default',
-                    '&:hover': {
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      fontWeight: 'bold',
-                      color: 'primary.main',
-                    }
-                  }}
-                >
-                  {site.name}
-                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <Typography
+                    variant='subtitle2'
+                    fontWeight='medium'
+                    noWrap
+                    sx={{
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      transition: 'all 0.2s ease-in-out',
+                      cursor: 'default',
+                      lineHeight: 1.2,
+                      '&:hover': {
+                        fontSize: { xs: '0.875rem', sm: '1rem' },
+                        fontWeight: 'bold',
+                        color: 'primary.main',
+                      }
+                    }}
+                  >
+                    {site.name}
+                  </Typography>
+                  <Typography
+                    variant='caption'
+                    color='text.secondary'
+                    noWrap
+                    sx={{
+                      fontSize: '0.7rem',
+                      opacity: 0.7,
+                      lineHeight: 1.2,
+                      mt: 0.2
+                    }}
+                  >
+                    {site.url?.replace(/^https?:\/\//i, '')}
+                  </Typography>
+                </Box>
               </Tooltip>
             </Box>
 
@@ -402,22 +418,38 @@ const SiteCard = memo(function SiteCard({
                       }
                     }}
                   >
-                    <Typography
-                      variant='subtitle2'
-                      fontWeight='medium'
-                      noWrap
-                      sx={{
-                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                        transition: 'all 0.2s ease-in-out',
-                        '&:hover': {
-                          fontSize: { xs: '0.875rem', sm: '1rem' },
-                          fontWeight: 'bold',
-                          color: 'primary.main',
-                        }
-                      }}
-                    >
-                      {site.name}
-                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                      <Typography
+                        variant='subtitle2'
+                        fontWeight='medium'
+                        noWrap
+                        sx={{
+                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                          transition: 'all 0.2s ease-in-out',
+                          lineHeight: 1.2,
+                          '&:hover': {
+                            fontSize: { xs: '0.875rem', sm: '1rem' },
+                            fontWeight: 'bold',
+                            color: 'primary.main',
+                          }
+                        }}
+                      >
+                        {site.name}
+                      </Typography>
+                      <Typography
+                        variant='caption'
+                        color='text.secondary'
+                        noWrap
+                        sx={{
+                          fontSize: '0.7rem',
+                          opacity: 0.7,
+                          lineHeight: 1.2,
+                          mt: 0.2
+                        }}
+                      >
+                        {site.url?.replace(/^https?:\/\//i, '')}
+                      </Typography>
+                    </Box>
                   </Tooltip>
                 </Box>
 
