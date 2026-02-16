@@ -66,10 +66,11 @@ const SiteCard = memo(function SiteCard({
 
   const style = {
     transform: CSS.Translate.toString(transform),
-    transition,
+    transition: isDragging ? 'none' : transition, // 拖动时禁用 transition 以提高响应速度
     zIndex: isDragging ? 9999 : 'auto',
-    opacity: isDragging ? 0 : 1, // 拖动时隐藏原位置
+    opacity: isDragging ? 0.3 : 1, // 降低原位透明度
     position: 'relative' as const,
+    willChange: isEditMode ? 'transform' : 'auto', // 编辑模式下开启硬件加速提示
   };
 
   // 如果没有图标，使用首字母作为图标

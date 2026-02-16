@@ -421,14 +421,13 @@ function App() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 1, // 降低激活阈值，使拖拽更敏感
-        delay: 0, // 移除延迟
+        distance: 5, // 移动 5px 后才触发，减少误触和闲置计算
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 100, // 降低触摸延迟
-        tolerance: 3, // 降低容忍值
+        delay: 250,
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
