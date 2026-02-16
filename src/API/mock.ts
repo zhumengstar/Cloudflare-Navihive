@@ -177,20 +177,21 @@ export class MockNavigationClient {
   }
 
   // 获取用户信息
-  async getUserProfile(): Promise<{ username: string; email: string; role: string }> {
+  async getUserProfile(userId?: number): Promise<{ username: string; email: string; role: string; avatar_url: string | null }> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     // 模拟返回当前用户信息
     if (this.isAuthenticated) {
       // 尝试解析 token Payload
+      console.log('[Mock GetProfile] Fetching profile for ID:', userId);
       try {
         if (this.token) {
           const parts = atob(this.token).split(':');
           if (parts.length >= 1) {
-            return { username: parts[0]!, email: `${parts[0]}@example.com`, role: 'user' };
+            return { username: parts[0]!, email: `${parts[0]}@example.com`, role: 'user', avatar_url: null };
           }
         }
       } catch { }
-      return { username: 'mockuser', email: 'mockuser@example.com', role: 'user' };
+      return { username: 'mockuser', email: 'mockuser@example.com', role: 'user', avatar_url: null };
     }
     throw new Error('未登录');
   }
@@ -203,6 +204,16 @@ export class MockNavigationClient {
       return `${username}@example.com`;
     }
     return null;
+  }
+
+  // 更新用户信息
+  async updateUserProfile(data: { email?: string; avatar_url?: string; userId?: number }): Promise<{ success: boolean; message?: string }> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    console.log('模拟更新用户信息:', data);
+    return {
+      success: true,
+      message: '个人资料已更新(模拟环境)',
+    };
   }
 
   async getGroups(): Promise<Group[]> {
@@ -835,5 +846,24 @@ export class MockNavigationClient {
   async batchUpdateIcons(): Promise<{ success: boolean; count: number }> {
     await new Promise((resolve) => setTimeout(resolve, 800));
     return { success: true, count: mockSites.length };
+  }
+
+  async batchUpdateSites(ids: number[], data: Partial<Site>): Promise<{ success: boolean; message: string; count: number }> {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const id of ids) {
+      const index = mockSites.findIndex((s) => s.id === id);
+      if (index !== -1) {
+        const existing = mockSites[index];
+        if (existing) {
+          mockSites[index] = {
+            ...existing,
+            ...data,
+            updated_at: new Date().toISOString(),
+          };
+        }
+      }
+    }
+    saveSitesToStorage();
+    return { success: true, message: '批量更新成功(模拟环境)', count: ids.length };
   }
 }

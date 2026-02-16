@@ -752,7 +752,7 @@ export default {
                                 );
                             }
                         }
-                        const result = await api.updateUserProfile(currentUserId, data);
+                        const result = await api.updateUserProfile({ userId: currentUserId, ...data });
                         return createJsonResponse(result, request);
                     } catch (error) {
                         return createJsonResponse(
@@ -919,6 +919,9 @@ export default {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
                     }
                     const idStr = parts[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
                     const id = parseInt(idStr);
                     if (isNaN(id)) {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
@@ -937,6 +940,9 @@ export default {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
                     }
                     const idStr = parts[1];
+                    if (!idStr) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
                     const id = parseInt(idStr);
                     if (isNaN(id)) {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
@@ -1391,7 +1397,9 @@ export default {
                     }
 
                     try {
+                        console.log('[Worker GET Profile] ID:', currentUserId);
                         const profile = await api.getUserProfile(currentUserId);
+                        console.log('[Worker GET Profile] Data:', JSON.stringify(profile));
                         return createJsonResponse(profile, request);
                     } catch (error) {
                         return createJsonResponse({ success: false, message: "获取资料失败" }, request, { status: 500 });
@@ -1404,11 +1412,13 @@ export default {
                     }
 
                     const data = await validateRequestBody(request) as { email?: string; avatar_url?: string };
+                    console.log('[Worker PUT Profile] ID:', currentUserId, 'Data:', JSON.stringify(data));
                     const result = await api.updateUserProfile({
                         userId: currentUserId,
                         email: data.email,
                         avatar_url: data.avatar_url
                     });
+                    console.log('[Worker PUT Profile] Result:', JSON.stringify(result));
 
                     return createJsonResponse(result, request);
                 }
@@ -1518,6 +1528,20 @@ export default {
                     }
                     const result = await api.batchUpdateIcons(currentUserId);
                     return createJsonResponse(result, request);
+                } else if (path === "sites/batch" && method === "PUT") {
+                    if (!isAuthenticated || !currentUserId) {
+                        return createJsonResponse({ success: false, message: "请先登录" }, request, { status: 401 });
+                    }
+                    try {
+                        const data = await validateRequestBody(request) as { ids: number[], data: Partial<Site> };
+                        if (!data.ids || !Array.isArray(data.ids)) {
+                            return createJsonResponse({ success: false, message: "参数 ids 必须是数组" }, request, { status: 400 });
+                        }
+                        const result = await api.batchUpdateSites(data.ids, data.data);
+                        return createJsonResponse(result, request);
+                    } catch (error) {
+                        return createJsonResponse({ success: false, message: "批量更新请求无效" }, request, { status: 400 });
+                    }
                 }
 
 

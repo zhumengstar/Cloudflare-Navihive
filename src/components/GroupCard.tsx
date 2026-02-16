@@ -94,6 +94,7 @@ interface GroupCardProps {
 
   draggedSiteId?: string | null; // 当前拖拽的站点ID
   onBatchDelete?: (siteIds: number[]) => void; // 新增：批量删除回调
+  onBatchFeaturedUpdate?: (siteIds: number[], isFeatured: number) => void; // 新增：批量更新精选状态回调
   onSiteClick?: (siteId: number) => void; // 新增：站点点击回调
   onSettingsOpen?: (siteId: number) => Promise<void> | void; // 新增：打开设置回调
   globalToggleVersion?: { type: 'expand' | 'collapse'; ts: number }; // 新增：全局切换指令
@@ -114,6 +115,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   configs,
   draggedSiteId,
   onBatchDelete,
+  onBatchFeaturedUpdate,
   globalToggleVersion,
   index, // 解构 index
 }) => {
@@ -156,6 +158,15 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
     if (selectedSiteIds.size === 0) return;
     if (onBatchDelete) {
       onBatchDelete(Array.from(selectedSiteIds));
+      handleExitBatchMode();
+    }
+  };
+
+  // 执行批量精选更新
+  const handleBatchFeaturedClick = (isFeatured: number) => {
+    if (selectedSiteIds.size === 0) return;
+    if (onBatchFeaturedUpdate) {
+      onBatchFeaturedUpdate(Array.from(selectedSiteIds), isFeatured);
       handleExitBatchMode();
     }
   };
@@ -472,6 +483,30 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
                     >
                       删除选中 ({selectedSiteIds.size})
                     </Button>
+                    {configs?.isAdmin === 'true' && (
+                      <>
+                        <Button
+                          variant='contained'
+                          color='warning'
+                          size='small'
+                          onClick={() => handleBatchFeaturedClick(1)}
+                          disabled={selectedSiteIds.size === 0}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          设为精选
+                        </Button>
+                        <Button
+                          variant='outlined'
+                          color='warning'
+                          size='small'
+                          onClick={() => handleBatchFeaturedClick(0)}
+                          disabled={selectedSiteIds.size === 0}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          取消精选
+                        </Button>
+                      </>
+                    )}
                     <Button
                       variant='outlined'
                       color='inherit'

@@ -66,6 +66,7 @@ export interface Site {
   updated_at?: string;
   is_deleted?: number;
   deleted_at?: string;
+  is_featured?: number; // 0 = 正常, 1 = 精选（仅访客可见）
 }
 
 // 分组及其站点 (用于优化 N+1 查询)
@@ -121,6 +122,7 @@ export interface LoginResponse {
   success: boolean;
   token?: string;
   message?: string;
+  userId?: number;
 }
 
 // 注册接口
@@ -166,7 +168,6 @@ export class NavigationAPI {
   private username: string;
   private passwordHash: string; // 存储bcrypt哈希而非明文密码
   private secret: string;
-  private alreadyInitialized: boolean = false;
   public currentUserId: number | null = null; // Changed to public so worker can set it
 
   constructor(envOrUrl: Env | string) {
@@ -340,6 +341,14 @@ export class NavigationAPI {
       // 字段可能已存在，忽略错误
     }
 
+    // 数据库迁移：添加 is_featured 到 sites 表
+    try {
+      await this.db.exec("ALTER TABLE sites ADD COLUMN is_featured INTEGER DEFAULT 0");
+      console.log('Migrated: Added is_featured column to sites table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
     // 初始化默认数据 (仅当从未初始化数据时)
     try {
       const isDataInitialized = await this.getConfig('DATA_INITIALIZED');
@@ -417,7 +426,7 @@ export class NavigationAPI {
             { id: user.id, username: user.username, role: user.role },
             loginRequest.rememberMe || false
           );
-          return { success: true, token, message: '登录成功' };
+          return { success: true, token, message: '登录成功', userId: user.id };
         }
         return { success: false, message: '用户名或密码错误' };
       }
@@ -434,21 +443,30 @@ export class NavigationAPI {
     const isPasswordValid = compareSync(loginRequest.password, this.passwordHash);
     if (isPasswordValid) {
       const token = await this.generateToken(
-        { id: 1, username: loginRequest.username, role: 'admin' }, // 默认管理员 ID 为 1
+        { id: 0, username: loginRequest.username, role: 'admin' }, // 使用 0 作为环境变量管理员的专用 ID
         loginRequest.rememberMe || false
       );
-      return { success: true, token, message: '登录成功' };
+      return { success: true, token, message: '登录成功', userId: 0 };
     }
 
     return { success: false, message: '用户名或密码错误' };
   }
 
   // 获取用户信息
-  async getUserProfile(userId: number): Promise<{ id: number; username: string; email: string | null; role: string; avatar_url: string | null }> {
+  async getUserProfile(userId?: number): Promise<{ id: number; username: string; email: string | null; role: string; avatar_url: string | null }> {
+    const targetId = userId !== undefined ? userId : this.currentUserId;
+
+    if (targetId === undefined) {
+      throw new Error('未指定用户 ID 且当前无登录上下文');
+    }
+
+    console.log('[DB GetProfile] Fetching profile for ID:', targetId);
     const user = await this.db
       .prepare('SELECT id, username, email, role, avatar_url FROM users WHERE id = ?')
-      .bind(userId)
+      .bind(targetId)
       .first<{ id: number; username: string; email: string | null; role: string; avatar_url: string | null }>();
+
+    console.log('[DB GetProfile] Result:', JSON.stringify(user));
 
     if (!user) {
       throw new Error('用户不存在');
@@ -471,6 +489,11 @@ export class NavigationAPI {
       if (profile.avatar_url !== undefined) {
         updates.push('avatar_url = ?');
         values.push(profile.avatar_url);
+        if (profile.avatar_url && profile.avatar_url.startsWith('data:image/')) {
+          console.log('[DB Update] Avatar type: Base64 (length:', profile.avatar_url.length, ')');
+        } else {
+          console.log('[DB Update] Avatar type: URL (', profile.avatar_url, ')');
+        }
       }
 
       if (updates.length === 0) {
@@ -480,7 +503,11 @@ export class NavigationAPI {
       const query = `UPDATE users SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
       values.push(profile.userId || this.currentUserId || 1);
 
-      await this.db.prepare(query).bind(...values).run();
+      console.log('[DB Update] Query:', query);
+      console.log('[DB Update] Values:', JSON.stringify(values));
+
+      const dbResult = await this.db.prepare(query).bind(...values).run();
+      console.log('[DB Update] Success:', dbResult.success);
       return { success: true, message: '更新成功' };
     } catch (error) {
       console.error('Failed to update user profile:', error);
@@ -1159,7 +1186,7 @@ export class NavigationAPI {
       FROM sites s
       JOIN groups g ON s.group_id = g.id
       JOIN users u ON g.user_id = u.id
-      WHERE s.is_public = 1 AND g.is_public = 1
+      WHERE s.is_public = 1 AND g.is_public = 1 AND s.is_featured = 1
       ORDER BY RANDOM()
       LIMIT ?
     `;
@@ -1702,13 +1729,49 @@ export class NavigationAPI {
   }
 
   /**
+   * 批量更新站点属性
+   */
+  async batchUpdateSites(ids: number[], data: Partial<Site>): Promise<{ success: boolean; message: string; count: number }> {
+    try {
+      if (!ids.length) return { success: true, message: '没有选中的站点', count: 0 };
+
+      const updates: string[] = [];
+      const values: any[] = [];
+      let i = 1;
+
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+          updates.push(`${key} = $${i++}`);
+          values.push(value);
+        }
+      }
+
+      if (updates.length === 0) {
+        return { success: true, message: '没有需要更新的内容', count: 0 };
+      }
+
+      updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+      const query = `UPDATE sites SET ${updates.join(', ')} WHERE id IN (${ids.join(', ')})`;
+      const result = await this.db.prepare(query).bind(...values).run();
+
+      if (!result.success) throw new Error('批量更新失败');
+
+      return { success: true, message: '批量更新成功', count: ids.length };
+    } catch (error) {
+      console.error('Failed to batch update sites:', error);
+      return { success: false, message: '批量更新失败', count: 0 };
+    }
+  }
+
+  /**
    * 批量更新所有站点的图标为统一 API 格式
    * 格式: https://www.faviconextractor.com/favicon/{domain}
    */
   async batchUpdateIcons(userId?: number): Promise<{ success: boolean; count: number }> {
     try {
       // 1. 获取该用户的所有站点
-      const sites = await this.getSites(undefined, userId);
+      const sites = await this.getSites(userId);
       let updatedCount = 0;
 
       // 提取域名的简单逻辑 (避免在 Worker 环境依赖外部库)

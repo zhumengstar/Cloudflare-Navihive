@@ -68,6 +68,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
     notes: site.notes || '',
     group_id: String(site.group_id),
     is_public: site.is_public ?? 1, // 默认为公开
+    is_featured: site.is_featured ?? 0,
   });
 
   // 用于预览图标
@@ -84,6 +85,7 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
         notes: site.notes || '',
         group_id: String(site.group_id),
         is_public: site.is_public ?? 1,
+        is_featured: site.is_featured ?? 0,
       });
       setIconPreview(site.icon || null);
     }
@@ -479,38 +481,73 @@ const SiteSettingsModal = memo(function SiteSettingsModal({
               size='small'
             />
 
-            {/* 公开/私密开关与上次访问时间并排显示 */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.is_public !== 0}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        is_public: e.target.checked ? 1 : 0,
-                      }))
+            {/* 公开/私密开关、精选开关与上次访问时间展示 */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={formData.is_public !== 0}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          is_public: e.target.checked ? 1 : 0,
+                        }))
+                      }
+                      color='primary'
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant='body1'>
+                        {formData.is_public !== 0 ? '公开站点' : '私密站点'}
+                      </Typography>
+                      <Typography variant='caption' color='text.secondary'>
+                        {formData.is_public !== 0
+                          ? '所有访客都可以看到此站点'
+                          : '只有管理员登录后才能看到此站点'}
+                      </Typography>
+                    </Box>
+                  }
+                />
+
+                {/* 设为精选 (仅管理员可见) */}
+                {api.isAdmin && (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.is_featured === 1}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            is_featured: e.target.checked ? 1 : 0,
+                          }))
+                        }
+                        color='secondary'
+                      />
                     }
-                    color='primary'
+                    label={
+                      <Box>
+                        <Typography variant='body1'>
+                          设为精选
+                        </Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          推荐至“探索发现”页面中展示
+                        </Typography>
+                        {formData.is_featured === 1 && formData.is_public === 0 && (
+                          <Typography variant='caption' color='error.main' sx={{ display: 'block', mt: 0.5 }}>
+                            注意：私密站点在访客模式下仍不可见
+                          </Typography>
+                        )}
+                      </Box>
+                    }
                   />
-                }
-                label={
-                  <Box>
-                    <Typography variant='body1'>
-                      {formData.is_public !== 0 ? '公开站点' : '私密站点'}
-                    </Typography>
-                    <Typography variant='caption' color='text.secondary'>
-                      {formData.is_public !== 0
-                        ? '所有访客都可以看到此站点'
-                        : '只有管理员登录后才能看到此站点'}
-                    </Typography>
-                  </Box>
-                }
-              />
+                )}
+              </Box>
 
               {/* 上次访问时间展示 */}
               {site.last_clicked_at && (
-                <Box sx={{ textAlign: 'right' }}>
+                <Box sx={{ textAlign: 'right', alignSelf: 'flex-end' }}>
                   <Typography variant='caption' display='block' color='text.secondary'>
                     上次点击时间
                   </Typography>

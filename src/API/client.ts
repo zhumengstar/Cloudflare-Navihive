@@ -122,6 +122,7 @@ export class NavigationClient {
     };
 
     // Cookie 会自动包含在请求中，无需手动设置
+    console.log(`[API Request] ${options.method || 'GET'} ${this.baseUrl}/${endpoint}`, options.body ? `Payload: ${options.body}` : '');
 
     const response = await fetch(`${this.baseUrl}/${endpoint}`, {
       headers,
@@ -197,8 +198,9 @@ export class NavigationClient {
     }
   }
 
-  async getUserProfile(): Promise<{ username: string; email: string; role: string; avatar_url: string | null }> {
-    return this.request('user/profile');
+  async getUserProfile(userId?: number): Promise<{ username: string; email: string; role: string; avatar_url: string | null }> {
+    const endpoint = userId ? `user/profile?userId=${userId}` : 'user/profile';
+    return this.request(endpoint) as Promise<{ username: string; email: string; role: string; avatar_url: string | null }>;
   }
 
   // 获取用户邮箱（公开接口，用于密码重置）
@@ -214,7 +216,7 @@ export class NavigationClient {
   }
 
   // 更新用户信息
-  async updateUserProfile(data: { email?: string }): Promise<{ success: boolean; message?: string }> {
+  async updateUserProfile(data: { email?: string; avatar_url?: string; userId?: number }): Promise<{ success: boolean; message?: string }> {
     return this.request('user/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -337,6 +339,14 @@ export class NavigationClient {
       body: JSON.stringify({ ids }),
     });
     return response.success;
+  }
+
+  async batchUpdateSites(ids: number[], data: Partial<Site>): Promise<{ success: boolean; message: string; count: number }> {
+    if (!ids || ids.length === 0) return { success: true, message: '没有选中的站点', count: 0 };
+    return this.request('sites/batch', {
+      method: 'PUT',
+      body: JSON.stringify({ ids, data }),
+    });
   }
 
   async restoreSite(id: number): Promise<Site | null> {

@@ -236,6 +236,7 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false); // Added missing state
   const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [showFeaturedOnly, setShowFeaturedOnly] = useState(false);
 
   // 注册状态
   const [registerLoading, setRegisterLoading] = useState(false);
@@ -604,10 +605,16 @@ function App() {
 
         // 获取详细用户资料以确定角色
         try {
-          const profile = await api.getUserProfile() as any;
+          const profile = await (api as any).getUserProfile();
           setUsername(profile.username);
-          setAvatarUrl(profile.avatar_url);
-          setIsAdmin(profile.role === 'admin');
+          setAvatarUrl(profile.avatar_url || null);
+          const adminStatus = profile.role === 'admin';
+          setIsAdmin(adminStatus);
+          setConfigs(prev => {
+            const next = { ...prev, isAdmin: adminStatus ? 'true' : 'false' };
+            console.log('[Debug] checkAuthStatus - Setting configs:', next);
+            return next;
+          });
         } catch (e) {
           console.warn('获取用户资料失败，回退到默认设置:', e);
           setUsername('User');
@@ -650,13 +657,23 @@ function App() {
         setUsername(username);
         // 获取用户头像
         try {
-          const profile = await api.getUserProfile() as any;
-          setAvatarUrl(profile.avatar_url);
+          if (loginResponse.userId) {
+            const profile = await api.getUserProfile(loginResponse.userId);
+            if (profile && profile.avatar_url) {
+              setAvatarUrl(profile.avatar_url);
+            }
+          }
         } catch (e) {
           console.warn('登录后获取用户资料失败:', e);
         }
         // 根据用户指示，只有 admin 是管理员
-        setIsAdmin(username === 'admin');
+        const adminStatus = username === 'admin';
+        setIsAdmin(adminStatus);
+        setConfigs(prev => {
+          const next = { ...prev, isAdmin: adminStatus ? 'true' : 'false' };
+          console.log('[Debug] handleLogin - Setting configs:', next);
+          return next;
+        });
         setIsLoginOpen(false);
         setLoginLoading(false);
 
@@ -763,7 +780,8 @@ function App() {
   // 获取用户邮箱（用于自动回显）
   const handleGetEmail = async (username: string) => {
     try {
-      return await api.getUserEmail(username);
+      const result = await (api as any).getUserEmail(username);
+      return result;
     } catch (error) {
       console.error('获取邮箱失败:', error);
       return null;
@@ -800,6 +818,8 @@ function App() {
 
     await api.logout();
     setIsAuthenticated(false);
+    setUsername('User'); // 重置用户名
+    setAvatarUrl(null); // 重置头像
     setIsAdmin(false); // 显式重置管理员权限
     setIsAuthRequired(false); // 允许继续以访客身份访问
     setViewMode('readonly'); // 切换到只读模式
@@ -1007,7 +1027,7 @@ function App() {
 
       // 同时也获取该用户的配置
       const userConfigs = await api.getConfigs();
-      setConfigs(prev => ({ ...DEFAULT_CONFIGS, ...userConfigs }));
+      setConfigs(prev => ({ ...DEFAULT_CONFIGS, ...userConfigs, isAdmin: isAdmin ? 'true' : 'false' }));
 
       // 获取所有分组和站点数据
       const groupsWithSites = await api.getGroupsWithSites();
@@ -1034,7 +1054,7 @@ function App() {
         scavengeSiteInfo();
       }
     }
-  }, [groups.length, isAuthenticated, viewMode, api, scavengeSiteInfo, handleError]);
+  }, [isAuthenticated, viewMode, api, scavengeSiteInfo, handleError]);
 
 
 
@@ -1690,7 +1710,7 @@ function App() {
       }
 
       // 更新配置状态
-      setConfigs({ ...tempConfigs });
+      setConfigs(prev => ({ ...prev, ...tempConfigs }));
       handleCloseConfig();
       handleSuccess('配置保存成功');
     } catch (error) {
@@ -1709,7 +1729,7 @@ function App() {
         }
       }
       // 更新本地状态
-      setConfigs({ ...newConfigs });
+      setConfigs(prev => ({ ...prev, ...newConfigs }));
       handleSuccess('设置已更新');
     } catch (error) {
       console.error('更新配置失败:', error);
@@ -2022,7 +2042,7 @@ function App() {
           } else {
             try {
               const siteName = bookmark.title || extractDomain(bookmark.url) || 'New Site';
-              const createdSite = await api.createSite({
+              await api.createSite({
                 name: siteName,
                 url: bookmark.url,
                 group_id: targetGroup.id as number,
@@ -2198,6 +2218,35 @@ function App() {
     }
   };
 
+  // 批量更新精选状态
+  const handleBatchFeaturedUpdate = async (siteIds: number[], isFeatured: number) => {
+    try {
+      if (!siteIds.length) return;
+
+      const result = await api.batchUpdateSites(siteIds, { is_featured: isFeatured });
+
+      if (result.success) {
+        // 同步更新本地状态
+        setGroups(prevGroups => prevGroups.map(group => ({
+          ...group,
+          sites: group.sites.map(s => {
+            if (siteIds.includes(s.id!)) {
+              return { ...s, is_featured: isFeatured };
+            }
+            return s;
+          })
+        })));
+
+        handleSuccess(isFeatured ? '已批量设为精选' : '已批量取消精选');
+      } else {
+        throw new Error(result.message || '更新失败');
+      }
+    } catch (error) {
+      console.error('批量更新精选失败:', error);
+      handleError('批量更新精选失败: ' + (error as Error).message);
+    }
+  };
+
   // 批量删除站点
   const handleBatchDeleteSites = async (siteIds: number[]) => {
     if (siteIds.length === 0) return;
@@ -2241,6 +2290,17 @@ function App() {
   }, [api, fetchData]);
 
   const ActiveLayout = configs['ui.style'] === 'classic' ? ClassicLayout : ModernLayout;
+
+  // 过滤后的数据
+  const displayGroups = useMemo(() => {
+    if (!showFeaturedOnly) return groups;
+
+    return groups.map(group => {
+      const featuredSites = group.sites.filter(s => s.is_featured === 1);
+      if (featuredSites.length === 0) return null;
+      return { ...group, sites: featuredSites };
+    }).filter(g => g !== null) as GroupWithSites[];
+  }, [groups, showFeaturedOnly]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -2544,6 +2604,7 @@ function App() {
                     <Box>
                       {/* 搜索框 ... */}
                       {(() => {
+                        console.log('[Debug] App Render - isAdmin:', isAdmin, 'configs.isAdmin:', configs.isAdmin);
                         const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
                         if (!searchBoxEnabled) return null;
                         if (viewMode === 'readonly' && configs['site.searchBoxGuestEnabled'] !== 'true') return null;
@@ -2552,8 +2613,8 @@ function App() {
                           <Box sx={{ mb: 4, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                             <Box sx={{ flexGrow: 1 }}>
                               <SearchBox
-                                groups={groups}
-                                sites={groups.flatMap((g) => g.sites || [])}
+                                groups={displayGroups}
+                                sites={displayGroups.flatMap((g) => g.sites || [])}
                                 onDelete={isAuthenticated ? handleSiteDelete : undefined}
                                 onEditGroup={(id) => {
                                   const group = groups.find(g => g.id === id);
@@ -2572,6 +2633,22 @@ function App() {
 
                             {/* 批量收起/展开按钮组 */}
                             <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                              {isAdmin && (
+                                <Tooltip title={showFeaturedOnly ? "显示全部" : "只看精选"}>
+                                  <IconButton
+                                    size="medium"
+                                    onClick={() => setShowFeaturedOnly(!showFeaturedOnly)}
+                                    sx={{
+                                      bgcolor: showFeaturedOnly ? 'secondary.main' : 'background.paper',
+                                      color: showFeaturedOnly ? 'white' : 'inherit',
+                                      boxShadow: 1,
+                                      '&:hover': { bgcolor: showFeaturedOnly ? 'secondary.dark' : 'action.hover' }
+                                    }}
+                                  >
+                                    <ViewQuiltIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                               <Tooltip title="全部收起">
                                 <IconButton
                                   size="medium"
@@ -2617,11 +2694,11 @@ function App() {
                             >
                               {sortMode === SortMode.GroupSort ? (
                                 <SortableContext
-                                  items={groups.map((group) => `group-${group.id}`)}
+                                  items={displayGroups.map((group) => `group-${group.id}`)}
                                   strategy={verticalListSortingStrategy}
                                 >
                                   <Stack spacing={2}>
-                                    {groups.map((group) => (
+                                    {displayGroups.map((group) => (
                                       <SortableGroupItem
                                         key={group.id}
                                         id={`group-${group.id}`}
@@ -2633,7 +2710,7 @@ function App() {
                                 </SortableContext>
                               ) : (
                                 <Box sx={{ '& > *': { mb: 5 } }}>
-                                  {groups.slice(0, visibleGroupsCount).map((group, index) => (
+                                  {displayGroups.slice(0, visibleGroupsCount).map((group, index) => (
                                     <GroupCard
                                       key={group.id}
                                       index={index} // 传递索引用于动画延迟
@@ -2655,7 +2732,7 @@ function App() {
                                       globalToggleVersion={globalToggleVersion}
                                     />
                                   ))}
-                                  {groups.length > visibleGroupsCount && (
+                                  {displayGroups.length > visibleGroupsCount && (
                                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                                       <CircularProgress size={24} />
                                     </Box>

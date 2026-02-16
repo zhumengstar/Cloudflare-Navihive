@@ -168,7 +168,7 @@ const VisitorHome: React.FC<VisitorHomeProps> = ({ api, onLoginClick }) => {
                 </Box>
 
                 <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
-                    {isSearching ? `搜索结果 (${filteredSites.length})` : '发现来自社区的精选书签，开启你的网络探索之旅'}
+                    {isSearching ? `搜索结果 (${filteredSites.length})` : '正在浏览由管理员精心为您挑选的社区精选书签，开启网络探索之旅'}
                 </Typography>
 
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>

@@ -16,7 +16,6 @@ import {
     Typography,
     List,
     ListItem,
-    ListItemSecondaryAction,
     Chip,
     TextField,
     Alert,
@@ -100,6 +99,15 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     const [changePwdError, setChangePwdError] = useState<string | null>(null);
     const [changePwdSuccess, setChangePwdSuccess] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string>('');
+    const [avatarUrl, setLocalAvatarUrl] = useState<string | null>(propAvatarUrl || null);
+    const [infoLoading, setInfoLoading] = useState(false);
+
+    // 同步外部属性到内部状态
+    React.useEffect(() => {
+        if (propAvatarUrl !== undefined) {
+            setLocalAvatarUrl(propAvatarUrl);
+        }
+    }, [propAvatarUrl]);
     const [isEditingEmail, setIsEditingEmail] = useState(false);
     const [editEmail, setEditEmail] = useState('');
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
@@ -119,16 +127,20 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     const handleInfoOpen = async () => {
         handleMenuClose();
         setInfoOpen(true);
+        setInfoLoading(true);
         try {
             const profile = await api.getUserProfile?.();
             if (profile) {
                 if (profile.email) setUserEmail(profile.email);
                 if (profile.avatar_url) {
+                    setLocalAvatarUrl(profile.avatar_url);
                     onAvatarUpdate?.(profile.avatar_url);
                 }
             }
         } catch (error) {
             console.error("Failed to fetch user info:", error);
+        } finally {
+            setInfoLoading(false);
         }
     };
 
@@ -165,10 +177,13 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
 
     const handleUpdateAvatar = async (url?: string) => {
         const targetUrl = url !== undefined ? url : editAvatar.trim();
+        console.log('[UserAvatar] Updating avatar to:', targetUrl);
         setUpdateLoading(true);
         try {
             const result = await api.updateUserProfile({ avatar_url: targetUrl });
+            console.log('[UserAvatar] Update result:', result);
             if (result.success) {
+                setLocalAvatarUrl(targetUrl);
                 onAvatarUpdate?.(targetUrl);
                 setIsEditingAvatar(false);
             } else {
@@ -308,11 +323,11 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 sx={{ ml: 1 }} // 移除 p:0 增加点击区域，添加 ml:1 保持间距
             >
                 <Avatar
-                    src={propAvatarUrl || undefined}
+                    src={avatarUrl || undefined}
                     sx={{
                         width: 40,
                         height: 40,
-                        bgcolor: propAvatarUrl ? 'transparent' : avatarColor,
+                        bgcolor: avatarUrl ? 'transparent' : avatarColor,
                         fontSize: '1rem',
                         fontWeight: 'bold',
                         cursor: 'pointer',
@@ -321,7 +336,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         },
                     }}
                 >
-                    {!propAvatarUrl && avatarLetter}
+                    {!avatarUrl && avatarLetter}
                 </Avatar>
             </IconButton>
 
@@ -479,62 +494,22 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                             }}
                         >
                             <Box sx={{ position: 'relative' }}>
-                                {propAvatarUrl && (
-                                    <Box
-                                        component='img'
-                                        src={propAvatarUrl}
-                                        alt='Avatar Preview'
-                                        sx={{
-                                            width: '100%',
-                                            height: 'auto',
-                                            maxHeight: 200,
-                                            objectFit: 'contain',
-                                            borderRadius: 2,
-                                            mb: 2,
-                                            border: '1px solid',
-                                            borderColor: 'divider',
-                                        }}
-                                    />
-                                )}
                                 <Avatar
-                                    src={propAvatarUrl || undefined}
+                                    src={avatarUrl || undefined}
                                     sx={{
-                                        width: 100,
-                                        height: 100,
-                                        fontSize: 40,
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease',
+                                        width: 80,
+                                        height: 80,
+                                        bgcolor: avatarUrl ? 'transparent' : avatarColor,
+                                        fontSize: '2rem',
+                                        fontWeight: 'bold',
+                                        mb: 1.5,
+                                        flexShrink: 0,
                                         border: '2px solid',
-                                        borderColor: isEditingAvatar ? 'primary.main' : 'divider',
-                                        '&:hover': {
-                                            opacity: 0.8,
-                                            transform: 'scale(1.05)',
-                                        },
+                                        borderColor: 'divider'
                                     }}
                                 >
-                                    {username?.charAt(0).toUpperCase()}
+                                    {infoLoading ? <CircularProgress size={40} /> : (!avatarUrl && avatarLetter)}
                                 </Avatar>
-                                {(propAvatarUrl || editAvatar) && (
-                                    <IconButton
-                                        size='small'
-                                        color='error'
-                                        sx={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            right: -10,
-                                            bgcolor: 'background.paper',
-                                            boxShadow: 2,
-                                            '&:hover': { bgcolor: 'error.light', color: 'white' },
-                                        }}
-                                        onClick={() => {
-                                            if (window.confirm('确定要清除头像吗？')) {
-                                                handleUpdateAvatar('');
-                                            }
-                                        }}
-                                    >
-                                        <DeleteSweepIcon fontSize='small' />
-                                    </IconButton>
-                                )}
                                 <input
                                     accept="image/*"
                                     id="avatar-upload-input"
@@ -548,8 +523,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                         size="small"
                                         sx={{
                                             position: 'absolute',
-                                            bottom: 0,
-                                            right: -10,
+                                            bottom: 12,
+                                            right: -8,
                                             bgcolor: 'background.paper',
                                             boxShadow: 2,
                                             '&:hover': { bgcolor: 'action.hover' }
@@ -611,18 +586,19 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                     <>
                                         <ListItemText
                                             primary='头像地址'
-                                            secondary={propAvatarUrl || '未设置'}
+                                            secondary={avatarUrl ? (avatarUrl.startsWith('data:image/') ? '[本地上传图片]' : avatarUrl) : '未设置'}
                                             primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                                             secondaryTypographyProps={{ variant: 'body1', noWrap: true, sx: { maxWidth: 200 } }}
                                         />
-                                        <ListItemSecondaryAction>
-                                            <IconButton edge="end" aria-label="edit" onClick={() => {
+                                        <Button
+                                            size="small"
+                                            onClick={() => {
+                                                setEditAvatar(avatarUrl && !avatarUrl.startsWith('data:image/') ? avatarUrl : '');
                                                 setIsEditingAvatar(true);
-                                                setEditAvatar(propAvatarUrl || '');
-                                            }}>
-                                                <SettingsIcon />
-                                            </IconButton>
-                                        </ListItemSecondaryAction>
+                                            }}
+                                        >
+                                            修改
+                                        </Button>
                                     </>
                                 )}
                             </ListItem>
