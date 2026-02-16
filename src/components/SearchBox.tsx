@@ -47,10 +47,12 @@ import type { Group, Site } from '../API/http';
 interface SearchBoxProps {
   groups: Group[];
   sites: Site[];
-  onInternalResultClick?: (result: SearchResultItem) => void;
+  onInternalResultClick?: (result?: SearchResultItem) => void;
   onDelete?: (id: number) => void;
   onEditGroup?: (id: number) => void;
   onMoveSite?: (siteId: number) => void;
+  onQueryChange?: (query: string) => void;
+  showDropdown?: boolean;
 }
 
 type SearchMode = 'internal' | 'external';
@@ -62,10 +64,18 @@ const SearchBox: React.FC<SearchBoxProps> = ({
   onDelete,
   onEditGroup,
   onMoveSite,
+  onQueryChange,
+  showDropdown = true,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [query, setQuery] = useState('');
+
+  // 同步 query 状态给父组件
+  useEffect(() => {
+    onQueryChange?.(query);
+  }, [query, onQueryChange]);
+
   const [mode, setMode] = useState<SearchMode>('internal');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -148,9 +158,15 @@ const SearchBox: React.FC<SearchBoxProps> = ({
       e.preventDefault();
 
       if (mode === 'internal') {
-        // 站内搜索：如果有结果，选择第一个
-        if (results.length > 0 && results[0]) {
-          handleResultClick(results[0]);
+        // 站内搜索：如果有结果，选择第一个，或者触发全局过滤
+        if (results.length > 0 && results[0] && query.trim()) {
+          // 这里我们通知父组件：搜索已完成，请展示结果
+          onInternalResultClick?.(); // 不带参数调用，表示“展示当前过滤出的结果”
+          setShowResults(false);
+        } else if (!query.trim()) {
+          // 清空搜索
+          onInternalResultClick?.();
+          setShowResults(false);
         }
       } else {
         // 站外搜索：执行搜索
@@ -430,7 +446,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
       </Box>
 
       {/* 站内搜索结果面板 */}
-      {mode === 'internal' && (
+      {mode === 'internal' && showDropdown && (
         <SearchResultPanel
           results={results}
           query={query}
