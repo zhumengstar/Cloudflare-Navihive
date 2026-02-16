@@ -140,6 +140,11 @@ const api = useMockApi
   ? new MockNavigationClient()
   : new NavigationClient('/api');
 
+// 将全局 api 实例挂载到 window 方便调试和部分组件访问 (可选)
+if (typeof window !== 'undefined') {
+  (window as any).navigationApi = api;
+}
+
 // 排序模式枚举
 enum SortMode {
   None, // 不排序
@@ -228,12 +233,12 @@ function App() {
   const [username, setUsername] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   // 注册状态
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
-  const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
 
   // 密码重置状态
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
@@ -598,8 +603,9 @@ function App() {
 
         // 获取详细用户资料以确定角色
         try {
-          const profile = await api.getUserProfile();
+          const profile = await api.getUserProfile() as any;
           setUsername(profile.username);
+          setAvatarUrl(profile.avatar_url);
           setIsAdmin(profile.role === 'admin');
         } catch (e) {
           console.warn('获取用户资料失败，回退到默认设置:', e);
@@ -628,19 +634,21 @@ function App() {
   // 登录功能
   const handleLogin = async (username: string, password: string, rememberMe: boolean = false) => {
     try {
-      setLoginLoading(true);
-      setLoginError(null);
-
-      // 调用登录接口
-      const loginResponse = await api.login(username, password, rememberMe);
-
       if (loginResponse?.success) {
         // 登录成功，立即切换状态并关闭登录界面
         api.isAuthenticated = true; // 同步 API 客户端状态
         setIsAuthenticated(true);
         setIsAuthRequired(false);
         setViewMode('edit');
+        setLoading(true); // 使用全局 loading
         setUsername(username);
+        // 获取用户头像
+        try {
+          const profile = await api.getUserProfile() as any;
+          setAvatarUrl(profile.avatar_url);
+        } catch (e) {
+          console.warn('登录后获取用户资料失败:', e);
+        }
         // 根据用户指示，只有 admin 是管理员
         setIsAdmin(username === 'admin');
         setIsLoginOpen(false);
@@ -680,7 +688,7 @@ function App() {
       setIsAuthenticated(false);
       setViewMode('readonly');
     } finally {
-      setLoginLoading(false);
+      setLoading(false);
     }
   };
 
@@ -698,7 +706,7 @@ function App() {
         // 注册成功后自动登录
         setTimeout(() => {
           handleLogin(username, password, true);
-        }, 500);
+        }, 1500);
       } else {
         setRegisterError(result?.message || '注册失败');
       }
@@ -2486,6 +2494,8 @@ function App() {
                         onBatchUpdateIcons={handleBatchUpdateIcons}
                         onResetData={handleOpenResetData}
                         api={api}
+                        avatarUrl={avatarUrl}
+                        onAvatarUpdate={(url) => setAvatarUrl(url)}
                       />
                     </Suspense>
                   )}
@@ -2505,6 +2515,7 @@ function App() {
                       '&:hover': {
                         bgcolor: 'action.hover',
                       },
+                      // 移除 ml: 1，由 Stack spacing 处理
                     }}
                   >
                     <GitHubIcon />

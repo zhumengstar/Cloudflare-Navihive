@@ -39,6 +39,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 const RecycleBin = React.lazy(() => import('./RecycleBin'));
 import { Site, Group } from '../API/http';
 
@@ -95,9 +96,12 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     const [changePwdError, setChangePwdError] = useState<string | null>(null);
     const [changePwdSuccess, setChangePwdSuccess] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string>('');
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [infoLoading, setInfoLoading] = useState(false);
     const [isEditingEmail, setIsEditingEmail] = useState(false);
     const [editEmail, setEditEmail] = useState('');
+    const [isEditingAvatar, setIsEditingAvatar] = useState(false);
+    const [editAvatar, setEditAvatar] = useState('');
     const [updateLoading, setUpdateLoading] = useState(false);
 
     const menuOpen = Boolean(anchorEl);
@@ -115,18 +119,13 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         setInfoOpen(true);
         setInfoLoading(true);
         try {
-            // 需要后端提供获取当前用户信息的接口，或者从 props 传递
-            // 这里假设通过 api 获取，如果没实现则捕获错误
             const profile = await api.getUserProfile?.();
-            if (profile && profile.email) {
-                setUserEmail(profile.email);
-            } else {
-                // 回退：如果 getUserProfile 未实现，尝试获取全部配置看是否有相关信息
-                // 或者在组件挂载时通过 props 传进来更合适。
-                // 暂时这里留空，稍后检查 API 定义
+            if (profile) {
+                if (profile.email) setUserEmail(profile.email);
+                if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
             }
         } catch (error) {
-            console.error("Failed to fetch user email:", error);
+            console.error("Failed to fetch user info:", error);
         } finally {
             setInfoLoading(false);
         }
@@ -161,6 +160,44 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         } finally {
             setUpdateLoading(false);
         }
+    };
+
+    const handleUpdateAvatar = async (url?: string) => {
+        const targetUrl = url !== undefined ? url : editAvatar.trim();
+        setUpdateLoading(true);
+        try {
+            const result = await api.updateUserProfile({ avatar_url: targetUrl });
+            if (result.success) {
+                setAvatarUrl(targetUrl);
+                setIsEditingAvatar(false);
+            } else {
+                alert(result.message || '更新头像失败');
+            }
+        } catch (error) {
+            console.error('Failed to update avatar:', error);
+            alert('更新头像失败');
+        } finally {
+            setUpdateLoading(false);
+        }
+    };
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 1024 * 1024) { // 1MB limit
+            alert('图片大小不能超过 1MB');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const base64 = e.target?.result as string;
+            if (base64) {
+                await handleUpdateAvatar(base64);
+            }
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleChangePwdOpen = () => {
@@ -270,10 +307,11 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 sx={{ ml: 1 }} // 移除 p:0 增加点击区域，添加 ml:1 保持间距
             >
                 <Avatar
+                    src={avatarUrl || undefined}
                     sx={{
                         width: 40,
                         height: 40,
-                        bgcolor: avatarColor,
+                        bgcolor: avatarUrl ? 'transparent' : avatarColor,
                         fontSize: '1rem',
                         fontWeight: 'bold',
                         cursor: 'pointer',
@@ -282,7 +320,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                         },
                     }}
                 >
-                    {avatarLetter}
+                    {!avatarUrl && avatarLetter}
                 </Avatar>
             </IconButton>
 
@@ -313,15 +351,16 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 {/* 用户名展示区域 */}
                 <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Avatar
+                        src={avatarUrl || undefined}
                         sx={{
                             width: 40,
                             height: 40,
-                            bgcolor: avatarColor,
+                            bgcolor: avatarUrl ? 'transparent' : avatarColor,
                             fontSize: '1.1rem',
                             fontWeight: 'bold',
                         }}
                     >
-                        {avatarLetter}
+                        {!avatarUrl && avatarLetter}
                     </Avatar>
                     <Box>
                         <Typography variant='subtitle2' fontWeight='bold' noWrap sx={{ maxWidth: 140 }}>
@@ -438,19 +477,47 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 mb: 2,
                             }}
                         >
-                            <Avatar
-                                sx={{
-                                    width: 72,
-                                    height: 72,
-                                    bgcolor: avatarColor,
-                                    fontSize: '2rem',
-                                    fontWeight: 'bold',
-                                    mb: 1.5,
-                                    flexShrink: 0,
-                                }}
-                            >
-                                {infoLoading ? <CircularProgress size={40} /> : avatarLetter}
-                            </Avatar>
+                            <Box sx={{ position: 'relative' }}>
+                                <Avatar
+                                    src={avatarUrl || undefined}
+                                    sx={{
+                                        width: 80,
+                                        height: 80,
+                                        bgcolor: avatarUrl ? 'transparent' : avatarColor,
+                                        fontSize: '2rem',
+                                        fontWeight: 'bold',
+                                        mb: 1.5,
+                                        flexShrink: 0,
+                                        border: '2px solid',
+                                        borderColor: 'divider'
+                                    }}
+                                >
+                                    {infoLoading ? <CircularProgress size={40} /> : (!avatarUrl && avatarLetter)}
+                                </Avatar>
+                                <input
+                                    accept="image/*"
+                                    id="avatar-upload-input"
+                                    type="file"
+                                    style={{ display: 'none' }}
+                                    onChange={handleFileUpload}
+                                />
+                                <label htmlFor="avatar-upload-input">
+                                    <IconButton
+                                        component="span"
+                                        size="small"
+                                        sx={{
+                                            position: 'absolute',
+                                            bottom: 12,
+                                            right: -8,
+                                            bgcolor: 'background.paper',
+                                            boxShadow: 2,
+                                            '&:hover': { bgcolor: 'action.hover' }
+                                        }}
+                                    >
+                                        <PhotoCameraIcon fontSize="small" />
+                                    </IconButton>
+                                </label>
+                            </Box>
                             <Typography variant='h6' fontWeight='bold'>
                                 {username}
                             </Typography>
@@ -467,6 +534,57 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                                     secondaryTypographyProps={{ variant: 'body1' }}
                                 />
+                            </ListItem>
+                            <ListItem disablePadding sx={{ py: 0.5 }}>
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                    <AccountCircleIcon fontSize='small' color='action' />
+                                </ListItemIcon>
+                                {isEditingAvatar ? (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 1 }}>
+                                        <TextField
+                                            size="small"
+                                            fullWidth
+                                            value={editAvatar}
+                                            onChange={(e) => setEditAvatar(e.target.value)}
+                                            placeholder="图片 URL (例如: https://...)"
+                                            disabled={updateLoading}
+                                            autoFocus
+                                        />
+                                        <Button
+                                            size="small"
+                                            variant="contained"
+                                            onClick={() => handleUpdateAvatar()}
+                                            disabled={updateLoading || !editAvatar.trim() || editAvatar === avatarUrl}
+                                        >
+                                            保存
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            onClick={() => setIsEditingAvatar(false)}
+                                            disabled={updateLoading}
+                                        >
+                                            取消
+                                        </Button>
+                                    </Box>
+                                ) : (
+                                    <>
+                                        <ListItemText
+                                            primary='头像地址'
+                                            secondary={avatarUrl ? (avatarUrl.startsWith('data:') ? '[已上传文件]' : avatarUrl) : '未设置'}
+                                            primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+                                            secondaryTypographyProps={{ variant: 'body1', noWrap: true, sx: { maxWidth: 200 } }}
+                                        />
+                                        <Button
+                                            size="small"
+                                            onClick={() => {
+                                                setEditAvatar(avatarUrl || '');
+                                                setIsEditingAvatar(true);
+                                            }}
+                                        >
+                                            修改
+                                        </Button>
+                                    </>
+                                )}
                             </ListItem>
                             <ListItem disablePadding sx={{ py: 0.5 }}>
                                 <ListItemIcon sx={{ minWidth: 36 }}>

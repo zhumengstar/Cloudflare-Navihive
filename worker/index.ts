@@ -1379,6 +1379,35 @@ export default {
                     const success = await api.clearAllData(currentUserId);
                     return createJsonResponse({ success }, request);
                 }
+
+                // 用户个人资料路由
+                else if (path === "user/profile" && method === "GET") {
+                    if (!isAuthenticated || !currentUserId) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+
+                    try {
+                        const profile = await api.getUserProfile(currentUserId);
+                        return createJsonResponse(profile, request);
+                    } catch (error) {
+                        return createJsonResponse({ success: false, message: "获取资料失败" }, request, { status: 500 });
+                    }
+                }
+
+                else if (path === "user/profile" && method === "PUT") {
+                    if (!isAuthenticated || !currentUserId) {
+                        return createResponse("未认证", request, { status: 401 });
+                    }
+
+                    const data = await validateRequestBody(request) as { email?: string; avatar_url?: string };
+                    const result = await api.updateUserProfile({
+                        userId: currentUserId,
+                        email: data.email,
+                        avatar_url: data.avatar_url
+                    });
+
+                    return createJsonResponse(result, request);
+                }
                 // 获取站点信息 (标题和描述)
                 else if (path === "utils/fetch-site-info" && method === "GET") {
                     if (!isAuthenticated) {

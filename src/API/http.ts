@@ -166,13 +166,26 @@ export class NavigationAPI {
   private username: string;
   private passwordHash: string; // 存储bcrypt哈希而非明文密码
   private secret: string;
+  private alreadyInitialized: boolean = false;
+  public currentUserId: number | null = null; // Changed to public so worker can set it
 
-  constructor(env: Env) {
-    this.db = env.DB;
-    this.authEnabled = env.AUTH_ENABLED === 'true';
-    this.username = env.AUTH_USERNAME || '';
-    this.passwordHash = env.AUTH_PASSWORD || ''; // 现在存储的是哈希
-    this.secret = env.AUTH_SECRET || 'DefaultSecretKey';
+  constructor(envOrUrl: Env | string) {
+    if (typeof envOrUrl === 'string') {
+      // Frontend client mode
+      this.db = null as any;
+      this.authEnabled = true;
+      this.username = '';
+      this.passwordHash = '';
+      this.secret = '';
+    } else {
+      // Backend/Worker mode
+      const env = envOrUrl as Env;
+      this.db = env.DB;
+      this.authEnabled = env.AUTH_ENABLED === 'true';
+      this.username = env.AUTH_USERNAME || '';
+      this.passwordHash = env.AUTH_PASSWORD || '';
+      this.secret = env.AUTH_SECRET || 'your-secret-key';
+    }
   }
 
   // 初始化数据库表
@@ -319,6 +332,14 @@ export class NavigationAPI {
       console.error('Migration failed for configs table:', e);
     }
 
+    // 数据库迁移：添加 avatar_url 到 users 表
+    try {
+      await this.db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+      console.log('Migrated: Added avatar_url to users table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
     // 初始化默认数据 (仅当从未初始化数据时)
     try {
       const isDataInitialized = await this.getConfig('DATA_INITIALIZED');
@@ -423,11 +444,11 @@ export class NavigationAPI {
   }
 
   // 获取用户信息
-  async getUserProfile(userId: number): Promise<{ id: number; username: string; email: string | null; role: string }> {
+  async getUserProfile(userId: number): Promise<{ id: number; username: string; email: string | null; role: string; avatar_url: string | null }> {
     const user = await this.db
-      .prepare('SELECT id, username, email, role FROM users WHERE id = ?')
+      .prepare('SELECT id, username, email, role, avatar_url FROM users WHERE id = ?')
       .bind(userId)
-      .first<{ id: number; username: string; email: string | null; role: string }>();
+      .first<{ id: number; username: string; email: string | null; role: string; avatar_url: string | null }>();
 
     if (!user) {
       throw new Error('用户不存在');
@@ -436,15 +457,43 @@ export class NavigationAPI {
     return user;
   }
 
+  // 更新用户信息
+  async updateUserProfile(profile: { userId?: number; email?: string; avatar_url?: string }): Promise<{ success: boolean; message: string }> {
+    try {
+      const updates: string[] = [];
+      const values: any[] = [];
+
+      if (profile.email !== undefined) {
+        updates.push('email = ?');
+        values.push(profile.email);
+      }
+
+      if (profile.avatar_url !== undefined) {
+        updates.push('avatar_url = ?');
+        values.push(profile.avatar_url);
+      }
+
+      if (updates.length === 0) {
+        return { success: true, message: '没有需要更新的内容' };
+      }
+
+      const query = `UPDATE users SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      values.push(profile.userId || this.currentUserId || 1);
+
+      await this.db.prepare(query).bind(...values).run();
+      return { success: true, message: '更新成功' };
+    } catch (error) {
+      console.error('Failed to update user profile:', error);
+      return { success: false, message: '更新失败: ' + (error instanceof Error ? error.message : '未知错误') };
+    }
+  }
+
   // 根据用户名获取邮箱 (用于重置密码回显)
   async getUserEmail(username: string): Promise<string | null> {
-    console.log(`[DEBUG] getUserEmail called for username: ${username}`);
     const user = await this.db
       .prepare('SELECT email FROM users WHERE username = ?')
       .bind(username)
       .first<{ email: string | null }>();
-
-    console.log(`[DEBUG] DB result for ${username}:`, user);
 
     // 数据库中有邮箱则直接返回
     if (user?.email) {
@@ -452,29 +501,11 @@ export class NavigationAPI {
     }
 
     // 特殊处理：如果是管理员且数据库中未设置邮箱（旧数据升级情况），返回默认邮箱
-    // 这里的 this.username 是从环境变量 AUTH_USERNAME 获取的
     if (username === 'admin' || (this.username && username === this.username)) {
-      console.log(`[DEBUG] Returning default admin email`);
       return `${username}@example.com`;
     }
 
     return null;
-  }
-
-  // 更新用户信息
-  async updateUserProfile(userId: number, data: { email?: string }): Promise<{ success: boolean; message?: string }> {
-    try {
-      if (data.email) {
-        await this.db
-          .prepare('UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .bind(data.email, userId)
-          .run();
-      }
-      return { success: true, message: '用户信息更新成功' };
-    } catch (error) {
-      console.error('更新用户信息失败:', error);
-      return { success: false, message: '更新用户信息失败' };
-    }
   }
 
   // 注册新用户
