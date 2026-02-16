@@ -19,7 +19,8 @@ import {
     InputAdornment,
     TextField,
     Tabs,
-    Tab
+    Tab,
+    Avatar
 } from '@mui/material';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import RestoreFromTrashIcon from '@mui/icons-material/RestoreFromTrash';
@@ -58,6 +59,19 @@ const HighlightText: React.FC<{ text: string; highlight: string }> = ({ text, hi
             )}
         </span>
     );
+};
+
+// 获取高清图标URL的辅助函数
+const getHighDefIcon = (iconUrl: string | null | undefined) => {
+    if (!iconUrl) return undefined;
+    // 如果是默认的 faviconextractor API，确保请求的是较高清版本
+    if (iconUrl.includes('faviconextractor.com')) {
+        if (!iconUrl.includes('larger=true')) {
+            const separator = iconUrl.includes('?') ? '&' : '?';
+            return `${iconUrl}${separator}larger=true`;
+        }
+    }
+    return iconUrl;
 };
 
 const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }) => {
@@ -401,6 +415,15 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }
                                         </Tooltip>
                                     }
                                 >
+                                    <ListItemIcon sx={{ minWidth: 48 }}>
+                                        <Avatar
+                                            src={getHighDefIcon(site.icon)}
+                                            variant="rounded"
+                                            sx={{ width: 40, height: 40, borderRadius: 1.5 }}
+                                        >
+                                            {site.name.charAt(0).toUpperCase()}
+                                        </Avatar>
+                                    </ListItemIcon>
                                     <ListItemText
                                         primary={site.name}
                                         secondary={site.url}
@@ -559,6 +582,15 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ open, onClose, onRestore, api }
                                                         }}
                                                         size="medium"
                                                     />
+                                                </ListItemIcon>
+                                                <ListItemIcon sx={{ minWidth: 56 }}>
+                                                    <Avatar
+                                                        src={getHighDefIcon(site.icon)}
+                                                        variant="rounded"
+                                                        sx={{ width: 40, height: 40, borderRadius: 1.5 }}
+                                                    >
+                                                        {site.name.charAt(0).toUpperCase()}
+                                                    </Avatar>
                                                 </ListItemIcon>
                                                 <ListItemText
                                                     primary={
