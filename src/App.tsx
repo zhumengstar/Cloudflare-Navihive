@@ -128,6 +128,8 @@ import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import WarningIcon from '@mui/icons-material/Warning';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import ViewQuiltIcon from '@mui/icons-material/ViewQuilt';
+import ViewStreamIcon from '@mui/icons-material/ViewStream';
 
 // 根据环境选择使用真实API还是模拟API
 // @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
@@ -213,10 +215,7 @@ function App() {
     localStorage.setItem('theme', !darkMode ? 'dark' : 'light');
   };
 
-  const [groups, setGroups] = useState<GroupWithSites[]>(() => {
-    // 立即从缓存加载数据 (Early SWR)
-    return loadFromCache(CACHE_DATA_KEY) || [];
-  });
+  const [groups, setGroups] = useState<GroupWithSites[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>(SortMode.None);
@@ -591,6 +590,12 @@ function App() {
         setIsAuthRequired(false);
         setViewMode('edit');
 
+        // 已认证情况下，尝试从缓存快速加载数据以实现 Early SWR
+        const cachedData = loadFromCache(CACHE_DATA_KEY);
+        if (cachedData && groups.length === 0) {
+          setGroups(cachedData);
+        }
+
         // 获取详细用户资料以确定角色
         try {
           const profile = await api.getUserProfile();
@@ -879,27 +884,30 @@ function App() {
   }, [darkMode]);
 
   // 处理错误的函数
-  const handleError = (errorMessage: string) => {
+  const handleError = useCallback((errorMessage: string) => {
     setSnackbarSeverity('error');
     setSnackbarMessage(errorMessage);
     setSnackbarOpen(true);
     console.error(errorMessage);
-  };
+  }, []);
 
   // 处理成功的函数
-  const handleSuccess = (successMessage: string) => {
+  const handleSuccess = useCallback((successMessage: string) => {
     setSnackbarSeverity('success');
     setSnackbarMessage(successMessage);
     setSnackbarOpen(true);
-  };
+  }, []);
 
   // 关闭提示框
-  const handleCloseSnackbar = () => {
+  const handleCloseSnackbar = useCallback(() => {
     setSnackbarOpen(false);
-  };
+  }, []);
 
   // 后台自动补全缺失的站点信息
   const scavengeSiteInfo = useCallback(async () => {
+    // 权限校验：仅在登录状态下启动自动补全和清理流程
+    if (!isAuthenticated) return;
+
     // 找出名称或描述为空的站点
     const sitesToRefresh: Site[] = [];
     groups.forEach(group => {
@@ -983,14 +991,18 @@ function App() {
       }
       setError(null);
 
-      // 使用新的 getGroupsWithSites API 优化 N+1 查询问题
-      const groupsWithSites = await api.getGroupsWithSites();
+      // 同时也获取该用户的配置
+      const userConfigs = await api.getConfigs();
+      setConfigs(prev => ({ ...DEFAULT_CONFIGS, ...userConfigs }));
 
+      // 获取所有分组和站点数据
+      const groupsWithSites = await api.getGroupsWithSites();
       setGroups(groupsWithSites);
 
       // 只有在已认证模式下才缓存业务数据
       if (isAuthenticated) {
         saveToCache(CACHE_DATA_KEY, groupsWithSites);
+        saveToCache(CACHE_CONFIG_KEY, userConfigs);
       }
     } catch (error) {
       console.error('加载数据失败:', error);
@@ -2431,6 +2443,31 @@ function App() {
                     </>
                   )}
                   <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} />
+                  <Tooltip title={uiStyle === 'modern' ? '切换到经典布局' : '切换到现代布局'}>
+                    <IconButton
+                      onClick={() => {
+                        const newStyle = uiStyle === 'modern' ? 'classic' : 'modern';
+                        setConfigs(prev => ({ ...prev, 'ui.style': newStyle }));
+                        // 如果已登录，保存到后端
+                        if (isAuthenticated) {
+                          api.setConfig('ui.style', newStyle);
+                        }
+                      }}
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        bgcolor: 'background.paper',
+                        boxShadow: 1,
+                        color: 'text.primary',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                    >
+                      {uiStyle === 'modern' ? <ViewStreamIcon /> : <ViewQuiltIcon />}
+                    </IconButton>
+                  </Tooltip>
                   {isAuthenticated && (
                     <Suspense fallback={null}>
                       <UserAvatar
@@ -2475,7 +2512,9 @@ function App() {
                 </Stack>
               }
             >
-              {(!isAuthenticated && !isAuthChecking && groups.length === 0) ? (
+              {isAuthChecking ? (
+                <PageSkeleton />
+              ) : (!isAuthenticated && groups.length === 0) ? (
                 <Suspense fallback={<PageSkeleton />}>
                   <VisitorHome
                     api={api}
@@ -2484,17 +2523,7 @@ function App() {
                 </Suspense>
               ) : (
                 <Box>
-                  {/* 同时显示访客主页（如果在检查中且无数据）和内容（如果有数据） */}
-                  {!isAuthenticated && !isAuthChecking && groups.length === 0 && (
-                    <Suspense fallback={<PageSkeleton />}>
-                      <VisitorHome
-                        api={api}
-                        onLoginClick={() => setIsLoginOpen(true)}
-                      />
-                    </Suspense>
-                  )}
-
-                  {(groups.length > 0 || isAuthenticated || isAuthChecking) && (
+                  {(groups.length > 0 || isAuthenticated) && (
                     <Box>
                       {/* 搜索框 ... */}
                       {(() => {

@@ -255,8 +255,10 @@ export class NavigationAPI {
       `CREATE TABLE IF NOT EXISTS sites (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, icon TEXT, description TEXT, notes TEXT, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, is_deleted INTEGER DEFAULT 0, deleted_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE);`
     );
 
-    // 创建全局配置表
-    await this.db.exec('CREATE TABLE IF NOT EXISTS configs (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);');
+    // 创建配置表
+    await this.db.exec(
+      'CREATE TABLE IF NOT EXISTS configs (key TEXT NOT NULL, value TEXT NOT NULL, user_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (key, user_id));'
+    );
 
     // 数据库迁移：添加 user_id 到 groups 表
     try {
@@ -293,6 +295,30 @@ export class NavigationAPI {
       // 字段可能已存在，忽略错误
     }
 
+    // 数据库迁移：添加 user_id 到 configs 表并更改主键
+    try {
+      // 1. 检查是否已经迁移过
+      const tableInfo = await this.db.prepare("PRAGMA table_info(configs)").all();
+      const hasUserId = (tableInfo.results as any[]).some((col: any) => col.name === 'user_id');
+
+      if (!hasUserId) {
+        // SQLite 不支持直接 ALTER TABLE 更改主键，需要：
+        // a. 重命名旧表
+        // b. 创建新表
+        // c. 迁移数据
+        // d. 删除旧表
+        await this.db.batch([
+          this.db.prepare("ALTER TABLE configs RENAME TO configs_old"),
+          this.db.prepare("CREATE TABLE configs (key TEXT NOT NULL, value TEXT NOT NULL, user_id INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (key, user_id))"),
+          this.db.prepare("INSERT INTO configs (key, value, created_at, updated_at) SELECT key, value, created_at, updated_at FROM configs_old"),
+          this.db.prepare("DROP TABLE configs_old")
+        ]);
+        console.log('Migrated: Added user_id to configs table and updated primary key');
+      }
+    } catch (e) {
+      console.error('Migration failed for configs table:', e);
+    }
+
     // 初始化默认数据 (仅当从未初始化数据时)
     try {
       const isDataInitialized = await this.getConfig('DATA_INITIALIZED');
@@ -327,12 +353,12 @@ export class NavigationAPI {
              INSERT INTO sites (group_id, name, url, icon, description, order_num, is_public) VALUES 
              (?, 'Stack Overflow', 'https://stackoverflow.com', 'https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64', '开发者问答社区', 1, 1),
              (?, 'MDN Web Docs', 'https://developer.mozilla.org', 'https://www.google.com/s2/favicons?domain=developer.mozilla.org&sz=64', 'Web 开发文档', 2, 1),
-             (?, 'V2EX', 'https://www.v2ex.com', 'https://www.google.com/s2/favicons?domain=v2ex.com&sz=64', '创意工作者社区', 3, 1)
+             (?, 'V2EX', 'https://www.v2ex.com', 'https://www.v2ex.com/favicon.ico', '创意工作者社区', 3, 1)
            `).bind(devGroup.id, devGroup.id, devGroup.id).run();
         }
 
-        await this.setConfig('DATA_INITIALIZED', 'true');
-        await this.setConfig('site.iconApi', 'https://www.faviconextractor.com/favicon/{domain}');
+        await this.setConfig('DATA_INITIALIZED', 'true', 1);
+        await this.setConfig('site.iconApi', 'https://www.faviconextractor.com/favicon/{domain}', 1);
         console.log('Default data initialized.');
       }
     } catch (e) {
@@ -340,7 +366,7 @@ export class NavigationAPI {
     }
 
     // 设置 DB 初始化标志
-    await this.setConfig('DB_INITIALIZED', 'true');
+    await this.setConfig('DB_INITIALIZED', 'true', 1);
 
     return { success: true, alreadyInitialized: false };
   }
@@ -374,8 +400,9 @@ export class NavigationAPI {
         }
         return { success: false, message: '用户名或密码错误' };
       }
-    } catch {
+    } catch (e) {
       // users 表可能不存在（旧版数据库），回退到环境变量认证
+      console.warn('Users table query failed, falling back to env auth:', e);
     }
 
     // 回退：使用环境变量中的管理员账号（兼容旧版）
@@ -1321,8 +1348,11 @@ export class NavigationAPI {
   }
 
   // 配置相关API
-  async getConfigs(): Promise<Record<string, string>> {
-    const result = await this.db.prepare('SELECT key, value FROM configs').all<Config>();
+  async getConfigs(userId: number = 1): Promise<Record<string, string>> {
+    const result = await this.db
+      .prepare('SELECT key, value FROM configs WHERE user_id = ?')
+      .bind(userId)
+      .all<Config>();
 
     // 将结果转换为键值对对象
     const configs: Record<string, string> = {};
@@ -1333,26 +1363,30 @@ export class NavigationAPI {
     return configs;
   }
 
-  async getConfig(key: string): Promise<string | null> {
+  async getConfig(key: string, userId: number = 1): Promise<string | null> {
     const result = await this.db
-      .prepare('SELECT value FROM configs WHERE key = ?')
-      .bind(key)
+      .prepare('SELECT value FROM configs WHERE key = ? AND user_id = ?')
+      .bind(key, userId)
       .first<{ value: string }>();
 
     return result ? result.value : null;
   }
 
-  async setConfig(key: string, value: string): Promise<boolean> {
+  async setConfig(key: string, value: string, userId: number = 1): Promise<boolean> {
     try {
+      // 一些系统级配置强制归属于 admin (userId = 1)
+      const SYSTEM_KEYS = ['DB_INITIALIZED', 'DATA_INITIALIZED'];
+      const targetUserId = SYSTEM_KEYS.includes(key) ? 1 : userId;
+
       // 使用UPSERT语法（SQLite支持）
       const result = await this.db
         .prepare(
-          `INSERT INTO configs (key, value, updated_at) 
-                    VALUES (?, ?, CURRENT_TIMESTAMP) 
-                    ON CONFLICT(key) 
+          `INSERT INTO configs (key, value, user_id, updated_at) 
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP) 
+                    ON CONFLICT(key, user_id) 
                     DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP`
         )
-        .bind(key, value, value)
+        .bind(key, value, targetUserId, value)
         .run();
 
       return result.success;
@@ -1362,8 +1396,11 @@ export class NavigationAPI {
     }
   }
 
-  async deleteConfig(key: string): Promise<boolean> {
-    const result = await this.db.prepare('DELETE FROM configs WHERE key = ?').bind(key).run();
+  async deleteConfig(key: string, userId: number = 1): Promise<boolean> {
+    const result = await this.db
+      .prepare('DELETE FROM configs WHERE key = ? AND user_id = ?')
+      .bind(key, userId)
+      .run();
 
     return result.success;
   }
@@ -1568,9 +1605,9 @@ export class NavigationAPI {
 
       // 导入配置数据
       for (const [key, value] of Object.entries(data.configs)) {
-        if (key !== 'DB_INITIALIZED') {
-          // 跳过数据库初始化标志
-          await this.setConfig(key, value);
+        if (key !== 'DB_INITIALIZED' && key !== 'DATA_INITIALIZED') {
+          // 跳过系统级初始化标志
+          await this.setConfig(key, value, userId);
         }
       }
 

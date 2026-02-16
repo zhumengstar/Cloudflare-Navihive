@@ -27,10 +27,12 @@ CREATE TABLE IF NOT EXISTS sites (
 
 -- 创建配置表
 CREATE TABLE IF NOT EXISTS configs (
-    key TEXT PRIMARY KEY,
+    key TEXT NOT NULL,
     value TEXT NOT NULL,
+    user_id INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (key, user_id)
 );
 
 -- 创建用户表
@@ -48,4 +50,4 @@ CREATE TABLE IF NOT EXISTS users (
 INSERT OR IGNORE INTO users (username, password_hash, role) VALUES ('admin', '$2y$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', 'admin');
 
 -- 设置初始化标志
-INSERT OR IGNORE INTO configs (key, value) VALUES ('DB_INITIALIZED', 'true');
+INSERT OR IGNORE INTO configs (key, value, user_id) VALUES ('DB_INITIALIZED', 'true', 1);

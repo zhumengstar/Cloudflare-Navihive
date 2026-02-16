@@ -1291,11 +1291,11 @@ export default {
                 }
                 // 配置相关API
                 else if (path === "configs" && method === "GET") {
-                    const configs = await api.getConfigs();
+                    const configs = await api.getConfigs(currentUserId);
                     return createJsonResponse(configs, request);
                 } else if (path.startsWith("configs/") && method === "GET") {
                     const key = path.substring("configs/".length);
-                    const value = await api.getConfig(key);
+                    const value = await api.getConfig(key, currentUserId);
                     return createJsonResponse({ key, value }, request);
                 } else if (path.startsWith("configs/") && method === "PUT") {
                     if (!isAuthenticated || (currentUserId !== 1)) {
@@ -1329,11 +1329,11 @@ export default {
                         );
                     }
 
-                    const result = await api.setConfig(key, data.value);
+                    const result = await api.setConfig(key, data.value, currentUserId);
                     return createJsonResponse({ success: result }, request);
                 } else if (path.startsWith("configs/") && method === "DELETE") {
                     const key = path.substring("configs/".length);
-                    const result = await api.deleteConfig(key);
+                    const result = await api.deleteConfig(key, currentUserId);
                     return createJsonResponse({ success: result }, request);
                 }
 
