@@ -197,7 +197,7 @@ export class NavigationClient {
     }
   }
 
-  async getUserProfile(): Promise<{ username: string; email: string; role: string }> {
+  async getUserProfile(): Promise<{ username: string; email: string; role: string; avatar_url: string | null }> {
     return this.request('user/profile');
   }
 

@@ -1004,6 +1004,10 @@ export default {
                     }
 
                     return createJsonResponse(result, request);
+                } else if (path === "init" && method === "GET") {
+                    // 初始化数据库及迁移
+                    await api.initDB();
+                    return createJsonResponse({ success: true, message: "数据库初始化/迁移完成" }, request);
                 } else if (path === "auth/register" && method === "POST") {
                     const data = (await validateRequestBody(request)) as RegisterRequest;
 
