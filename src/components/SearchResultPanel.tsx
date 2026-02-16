@@ -18,7 +18,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import {
-  Language as LanguageIcon,
   Folder as FolderIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
@@ -123,14 +122,39 @@ const SearchResultPanel: React.FC<SearchResultPanelProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          width: 40,
-                          height: 40,
+                          width: 32, // 改为 32x32 与 SiteCard 保持一致性
+                          height: 32,
                           borderRadius: 1,
                           bgcolor: result.type === 'site' ? 'primary.light' : 'secondary.light',
                           color: result.type === 'site' ? 'primary.main' : 'secondary.main',
+                          overflow: 'hidden',
+                          flexShrink: 0,
                         }}
                       >
-                        {result.type === 'site' ? <LanguageIcon /> : <FolderIcon />}
+                        {result.type === 'site' ? (
+                          result.icon ? (
+                            <Box
+                              component="img"
+                              src={result.icon}
+                              alt={result.name}
+                              sx={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                              }}
+                              onError={(e: any) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement.innerHTML = `<span>${result.name.charAt(0).toUpperCase()}</span>`;
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="body2" fontWeight="bold">
+                              {result.name.charAt(0).toUpperCase()}
+                            </Typography>
+                          )
+                        ) : (
+                          <FolderIcon fontSize="small" />
+                        )}
                       </Box>
 
                       {/* 内容 */}

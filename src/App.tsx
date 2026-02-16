@@ -2,7 +2,7 @@ import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } fro
 import { NavigationClient } from './API/client';
 import { MockNavigationClient } from './API/mock';
 import { Site, Group } from './API/http';
-import { parseBookmarks } from './utils/bookmarkParser';
+import { parseBookmarks, BookmarkGroup } from './utils/bookmarkParser';
 import { GroupWithSites } from './types';
 import ThemeToggle from './components/ThemeToggle';
 import GroupCard from './components/GroupCard';
@@ -976,10 +976,10 @@ function App() {
     }
   }, [groups, configs, api]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     try {
-      // 只有在完全没有数据（缓存也没）时才展示 loading
-      if (groups.length === 0) {
+      // 只有在完全没有数据（缓存也没）时且非静默加载才展示 loading
+      if (!silent && groups.length === 0) {
         setLoading(true);
       }
       setError(null);
@@ -1000,16 +1000,16 @@ function App() {
       if (groups.length === 0) {
         handleError('加载数据失败: ' + (error instanceof Error ? error.message : '未知错误'));
       }
-
-      // 如果因为认证问题导致加载失败，处理认证状态
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       // 加载完成后，如果是编辑模式且已认证，触发后台自动补全
       if (viewMode === 'edit' && isAuthenticated) {
         scavengeSiteInfo();
       }
     }
-  }, [groups.length, isAuthenticated, viewMode, api, scavengeSiteInfo]);
+  }, [groups.length, isAuthenticated, viewMode, api, scavengeSiteInfo, handleError]);
 
 
 
@@ -1129,69 +1129,64 @@ function App() {
     setCurrentSortingGroupId(null);
   }, []);
 
-  // 处理站点恢复
-  const handleSiteRestored = useCallback((siteOrSites: Site | Site[]) => {
-    const sitesToRestore = Array.isArray(siteOrSites) ? siteOrSites : [siteOrSites];
-    if (sitesToRestore.length === 0) return;
+  // 处理恢复 (站点或分组)
+  const handleRestore = useCallback((itemOrItems: Site | Site[] | Group | Group[]) => {
+    const items = Array.isArray(itemOrItems) ? itemOrItems : [itemOrItems];
+    if (items.length === 0) return;
 
-    setGroups((prevGroups) => {
-      const newGroups = [...prevGroups];
-      let updated = false;
+    // 区分站点和分组
+    const sitesToRestore = items.filter(item => 'url' in item) as Site[];
+    // @ts-ignore - group doesn't have url
+    const groupsToRestore = items.filter(item => !('url' in item)) as Group[];
 
-      // 按分组 ID 对要恢复的站点进行归类
-      const sitesByGroup = sitesToRestore.reduce((acc, site) => {
-        if (site.group_id !== undefined && site.group_id !== null) {
-          const gid = site.group_id;
-          if (!acc[gid]) acc[gid] = [];
-          acc[gid]!.push(site);
-        }
-        return acc;
-      }, {} as Record<number, Site[]>);
+    if (sitesToRestore.length > 0) {
+      setGroups((prevGroups) => {
+        const newGroups = [...prevGroups];
+        let updated = false;
 
-      for (const [groupIdStr, sites] of Object.entries(sitesByGroup)) {
-        const groupId = Number(groupIdStr);
-        const groupIndex = newGroups.findIndex((g) => g.id === groupId);
+        // 按分组 ID 对要恢复的站点进行归类
+        const sitesByGroup = sitesToRestore.reduce((acc, site) => {
+          if (site.group_id !== undefined && site.group_id !== null) {
+            const gid = site.group_id;
+            if (!acc[gid]) acc[gid] = [];
+            acc[gid]!.push(site);
+          }
+          return acc;
+        }, {} as Record<number, Site[]>);
 
-        if (groupIndex !== -1) {
-          const targetGroup = { ...newGroups[groupIndex] };
-          const existingSites = targetGroup.sites ? [...targetGroup.sites] : [];
-          let groupUpdated = false;
+        for (const [groupIdStr, sites] of Object.entries(sitesByGroup)) {
+          const groupId = Number(groupIdStr);
+          const groupIndex = newGroups.findIndex((g) => g.id === groupId);
 
-          for (const site of sites) {
-            if (!existingSites.find((s) => s.id === site.id)) {
-              existingSites.push(site);
-              groupUpdated = true;
+          if (groupIndex !== -1) {
+            const targetGroup = { ...newGroups[groupIndex] };
+            const existingSites = targetGroup.sites ? [...targetGroup.sites] : [];
+            let groupUpdated = false;
+
+            for (const site of sites) {
+              if (!existingSites.find((s) => s.id === site.id)) {
+                existingSites.push(site);
+                groupUpdated = true;
+              }
+            }
+
+            if (groupUpdated) {
+              existingSites.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+              targetGroup.sites = existingSites;
+              newGroups[groupIndex] = targetGroup as GroupWithSites;
+              updated = true;
             }
           }
-
-          if (groupUpdated) {
-            existingSites.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
-            targetGroup.sites = existingSites;
-            newGroups[groupIndex] = targetGroup as GroupWithSites;
-            updated = true;
-          }
-        } else {
-          // 如果找不到分组，可能是数据不同步，标记需要刷新
-          updated = false;
-          fetchData();
-          return prevGroups;
         }
-      }
 
-      if (updated) {
-        setSnackbarMessage(
-          Array.isArray(siteOrSites)
-            ? `已批量恢复 ${siteOrSites.length} 个站点`
-            : `已恢复站点: ${siteOrSites?.name || ''}`
-        );
-        setSnackbarSeverity('success');
-        setSnackbarOpen(true);
-        return newGroups;
-      }
+        return updated ? newGroups : prevGroups;
+      });
+    }
 
-      return prevGroups;
-    });
-  }, [fetchData]);
+    // 如果恢复了分组，或者恢复了站点，我们最好都静默刷新一下以确保同步最新状态
+    fetchData(true);
+    handleSuccess(`成功恢复了 ${items.length} 个项目`);
+  }, [fetchData, handleSuccess]);
 
   // 辅助函数：从URL获取站点信息
   const handleUrlBlur = async (url: string) => {
@@ -1903,8 +1898,10 @@ function App() {
     }
   };
 
+
+
   const runImportIteration = async (
-    bookmarkGroups: any[],
+    bookmarkGroups: BookmarkGroup[],
     initialProcessed: number,
     totalBookmarks: number,
     initialGroupsCreated: number,
@@ -2008,19 +2005,18 @@ function App() {
                 is_public: 1,
               } as Site);
               sitesCreated++;
-              existingUrls.add(currentNormalizedUrl);
-              if (createdSite?.id) enrichSiteInBackground(createdSite.id, createdSite.url);
             } catch (error) {
-              sitesSkipped++;
             }
           }
 
+          // 增加处理计数，确保进度被正确保存 (移到 if/else 之外)
+          processed++;
+
           // 按照用户要求：百分比 = (已导入书签数 / 书签总数)
-          // 注意：这会导致非 100% 完成度（如果存在跳过），但在导入对话框中更直观
           const progress = totalBookmarks > 0 ? Math.round((sitesCreated / totalBookmarks) * 100) : 0;
           setChromeImportProgress(progress);
 
-          // 每处理 5 个书签持久化一次，避免频繁访问磁盘
+          // 每处理 5 个书签持久化一次
           if (processed % 5 === 0) {
             saveImportTask({
               type: 'chrome',
@@ -2033,8 +2029,8 @@ function App() {
               sitesSkipped
             });
           }
-        }
-      }
+        } // inner loop end
+      } // outer loop end
 
       // 完成后清理
       const summary = [
@@ -2128,15 +2124,29 @@ function App() {
 
   // 删除分组
   const handleGroupDelete = async (groupId: number) => {
+    const groupToDelete = groups.find(g => g.id === groupId);
+    if (groupToDelete?.is_protected === 1) {
+      handleError('此分组是受保护的，不允许删除');
+      return;
+    }
+
+    // 乐观更新：先在 UI 上移除
+    const previousGroups = [...groups];
+    setGroups(prevGroups => prevGroups.filter(group => group.id !== groupId));
+
     try {
-      await api.deleteGroup(groupId);
+      const success = await api.deleteGroup(groupId);
 
-      // 局部更新本地状态
-      setGroups(prevGroups => prevGroups.filter(group => group.id !== groupId));
-
-      handleSuccess('分组已删除');
+      if (success) {
+        handleSuccess('分组已删除');
+      } else {
+        // 如果后端返回 explicit failure (false)，回滚
+        throw new Error('操作未成功');
+      }
     } catch (error) {
       console.error('删除分组失败:', error);
+      // 回滚状态
+      setGroups(previousGroups);
       handleError('删除分组失败: ' + (error as Error).message);
     }
   };
@@ -2428,7 +2438,7 @@ function App() {
                         username={username}
                         isAdmin={isAdmin}
                         onLogout={handleLogout}
-                        onSiteRestored={handleSiteRestored}
+                        onRestore={handleRestore}
                         onStartGroupSort={startGroupSort}
                         onStartCrossGroupDrag={startCrossGroupDrag}
                         onOpenConfig={handleOpenConfig}
@@ -2567,7 +2577,12 @@ function App() {
                                 >
                                   <Stack spacing={2}>
                                     {groups.map((group) => (
-                                      <SortableGroupItem key={group.id} id={`group-${group.id}`} group={group} />
+                                      <SortableGroupItem
+                                        key={group.id}
+                                        id={`group-${group.id}`}
+                                        group={group}
+                                        onDelete={handleGroupDelete}
+                                      />
                                     ))}
                                   </Stack>
                                 </SortableContext>

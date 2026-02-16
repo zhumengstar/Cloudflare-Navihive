@@ -123,9 +123,11 @@ const EditGroupDialog: React.FC<EditGroupDialogProps> = ({
             <Button onClick={onClose} color='inherit'>
               取消
             </Button>
-            <Button onClick={handleDelete} color='error' variant='outlined'>
-              删除
-            </Button>
+            {group.is_protected !== 1 && (
+              <Button onClick={handleDelete} color='error' variant='outlined'>
+                删除
+              </Button>
+            )}
             <Button
               onClick={handleSave}
               color='primary'

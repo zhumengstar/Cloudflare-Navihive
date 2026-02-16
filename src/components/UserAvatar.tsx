@@ -40,13 +40,13 @@ import FileUploadIcon from '@mui/icons-material/FileUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 const RecycleBin = React.lazy(() => import('./RecycleBin'));
-import { Site } from '../API/http';
+import { Site, Group } from '../API/http';
 
 interface UserAvatarProps {
     username: string;
     onLogout: () => void;
     onChangePassword?: (oldPassword: string, newPassword: string) => Promise<boolean>;
-    onSiteRestored: (site: Site | Site[]) => void;
+    onRestore: (item: Site | Site[] | Group | Group[]) => void;
     onStartGroupSort: () => void;
     onStartCrossGroupDrag: () => void;
     onOpenConfig: () => void;
@@ -66,7 +66,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     username,
     onLogout,
     onChangePassword,
-    onSiteRestored,
+    onRestore,
     onStartGroupSort,
     onStartCrossGroupDrag,
     onOpenConfig,
@@ -225,9 +225,9 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         setRecycleBinOpen(false);
     };
 
-    const handleRestoreSite = (site: Site | Site[]) => {
-        if (onSiteRestored) {
-            onSiteRestored(site);
+    const handleRestoreItem = (item: Site | Site[] | Group | Group[]) => {
+        if (onRestore) {
+            onRestore(item);
         }
     };
 
@@ -644,7 +644,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                     <RecycleBin
                         open={recycleBinOpen}
                         onClose={handleRecycleBinClose}
-                        onRestore={handleRestoreSite}
+                        onRestore={handleRestoreItem}
                         api={api}
                     />
                 </Suspense>

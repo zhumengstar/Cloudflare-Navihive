@@ -14,6 +14,7 @@ export interface SearchResultItem {
   groupName?: string; // site 才有
   name: string;
   url?: string; // site 才有
+  icon?: string; // site 才有
   description?: string;
   notes?: string; // site 才有
   matchedFields: string[]; // 匹配到的字段名称，用于高亮显示
@@ -75,6 +76,7 @@ function searchSites(
         groupName: group?.name || '未知分组',
         name: site.name,
         url: site.url,
+        icon: site.icon,
         description: site.description,
         notes: site.notes,
         matchedFields,

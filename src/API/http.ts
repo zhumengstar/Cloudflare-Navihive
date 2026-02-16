@@ -45,6 +45,10 @@ export interface Group {
   user_id?: number; // 新增归属用户ID
   created_at?: string;
   updated_at?: string;
+  is_deleted?: number;
+  deleted_at?: string;
+  is_protected?: number; // 0 = 正常, 1 = 受保护（不可删除）
+  site_count?: number; // Optional site count for UI display
 }
 
 export interface Site {
@@ -243,8 +247,8 @@ export class NavigationAPI {
 
     // 先创建groups表
     await this.db.exec(
-      `CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, user_id INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
-    );
+      `CREATE TABLE IF NOT EXISTS groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, order_num INTEGER NOT NULL, is_public INTEGER DEFAULT 1, user_id INTEGER DEFAULT 1, is_protected INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`
+    );;
 
     // 再创建sites表
     await this.db.exec(
@@ -258,6 +262,33 @@ export class NavigationAPI {
     try {
       await this.db.exec("ALTER TABLE groups ADD COLUMN user_id INTEGER DEFAULT 1");
       console.log('Migrated: Added user_id to groups table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
+    // 数据库迁移：添加 is_deleted 到 groups 表
+    try {
+      await this.db.exec("ALTER TABLE groups ADD COLUMN is_deleted INTEGER DEFAULT 0");
+      await this.db.exec("CREATE INDEX IF NOT EXISTS idx_groups_is_deleted ON groups(is_deleted)");
+      console.log('Migrated: Added is_deleted to groups table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
+    // 数据库迁移：添加 deleted_at 到 groups 表
+    try {
+      await this.db.exec("ALTER TABLE groups ADD COLUMN deleted_at TIMESTAMP");
+      console.log('Migrated: Added deleted_at to groups table');
+    } catch (e) {
+      // 字段可能已存在，忽略错误
+    }
+
+    // 数据库迁移：添加 is_protected 到 groups 表
+    try {
+      await this.db.exec("ALTER TABLE groups ADD COLUMN is_protected INTEGER DEFAULT 0");
+      console.log('Migrated: Added is_protected to groups table');
+      // 将现有的“常用工具”标记为受保护
+      await this.db.exec("UPDATE groups SET is_protected = 1 WHERE name = '常用工具'");
     } catch (e) {
       // 字段可能已存在，忽略错误
     }
@@ -437,12 +468,26 @@ export class NavigationAPI {
       const passwordHash = hashSync(request.password, 10);
 
       // 插入新用户
-      const result = await this.db
+      const userResult = await this.db
         .prepare('INSERT INTO users (username, password_hash, email, role) VALUES (?, ?, ?, ?)')
         .bind(request.username, passwordHash, request.email, 'user')
         .run();
 
-      console.log(`[DEBUG] Insert result:`, result);
+      console.log(`[DEBUG] Insert user result:`, userResult);
+
+      // 获取新创建的用户 ID (对于 D1, meta.last_row_id 可能有用，或者直接查询)
+      const newUser = await this.db
+        .prepare('SELECT id FROM users WHERE username = ?')
+        .bind(request.username)
+        .first<{ id: number }>();
+
+      if (newUser) {
+        // 为新用户创建一个默认的“常用工具”分组，并标记为受保护
+        await this.db.prepare(
+          "INSERT INTO groups (name, order_num, is_public, user_id, is_protected) VALUES ('常用工具', 1, 1, ?, 1)"
+        ).bind(newUser.id).run();
+        console.log(`[DEBUG] Created default protected group for user ${newUser.id}`);
+      }
 
       return { success: true, message: '注册成功' };
     } catch (error) {
@@ -827,8 +872,92 @@ export class NavigationAPI {
   }
 
   async deleteGroup(id: number): Promise<boolean> {
-    const result = await this.db.prepare('DELETE FROM groups WHERE id = ?').bind(id).run();
-    return result.success;
+    // 默认执行软删除
+    return this.softDeleteGroup(id);
+  }
+
+  // 软删除分组
+  async softDeleteGroup(id: number): Promise<boolean> {
+    try {
+      // 检查是否为受保护的分组 (使用 is_protected 标志)
+      const group = await this.getGroup(id);
+      if (group?.is_protected === 1) {
+        throw new Error('此分组是受保护的，不允许删除');
+      }
+
+      await this.db
+        .prepare('UPDATE groups SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .bind(id)
+        .run();
+      return true;
+    } catch (error) {
+      console.error('软删除分组失败:', error);
+      return false;
+    }
+  }
+
+  // 恢复分组
+  async restoreGroup(id: number): Promise<Group | null> {
+    try {
+      await this.db
+        .prepare('UPDATE groups SET is_deleted = 0, deleted_at = NULL WHERE id = ?')
+        .bind(id)
+        .run();
+      return this.getGroup(id);
+    } catch (error) {
+      console.error('恢复分组失败:', error);
+      return null;
+    }
+  }
+
+  // 彻底删除分组
+  async deleteGroupPermanently(id: number): Promise<boolean> {
+    try {
+      // 检查是否为受保护的分组 (使用 is_protected 标志)
+      const group = await this.getGroup(id);
+      if (group?.is_protected === 1) {
+        throw new Error('此分组是受保护的，不允许彻底删除');
+      }
+
+      await this.db.prepare('DELETE FROM groups WHERE id = ?').bind(id).run();
+      return true;
+    } catch (error) {
+      console.error('彻底删除分组失败:', error);
+      return false;
+    }
+  }
+
+  // 获取回收站中的分组
+  async getTrashGroups(userId?: number): Promise<Group[]> {
+    console.log(`[DEBUG] getTrashGroups called for userId: ${userId}`);
+    // Use LEFT JOIN to count sites that are NOT deleted (or were deleted with the group)
+    // Actually, if a group is soft-deleted, its sites are usually NOT soft-deleted individually
+    // but hidden because the group is hidden.
+    // So we just count sites where is_deleted is 0 or NULL
+    let query = `
+      SELECT g.*, COUNT(s.id) as site_count
+      FROM groups g
+      LEFT JOIN sites s ON g.id = s.group_id AND (s.is_deleted = 0 OR s.is_deleted IS NULL)
+      WHERE g.is_deleted = 1
+    `;
+    const params: number[] = [];
+
+    if (userId !== undefined) {
+      query += ' AND g.user_id = ?';
+      params.push(userId);
+    }
+
+    query += ' GROUP BY g.id ORDER BY g.deleted_at DESC';
+
+    try {
+      // Use raw query result mapping if needed, but D1 usually handles this well
+      const result = await this.db.prepare(query).bind(...params).all<Group>();
+      console.log(`[DEBUG] getTrashGroups result count: ${result.results?.length}`);
+      return result.results || [];
+    } catch (error) {
+      console.error('[ERROR] getTrashGroups failed:', error);
+      return [];
+    }
   }
 
   // 网站相关 API
@@ -858,12 +987,13 @@ export class NavigationAPI {
   // 获取所有分组及其站点 (使用 JOIN 优化,避免 N+1 查询)
   async getGroupsWithSites(userId?: number): Promise<GroupWithSites[]> {
     // 使用 LEFT JOIN 一次性获取所有数据
-    let query = `
+    const query = `
       SELECT
         g.id as group_id,
         g.name as group_name,
         g.order_num as group_order,
         g.is_public as group_is_public,
+        g.is_protected as group_is_protected,
         g.created_at as group_created_at,
         g.updated_at as group_updated_at,
         s.id as site_id,
@@ -879,21 +1009,16 @@ export class NavigationAPI {
         s.updated_at as site_updated_at
       FROM groups g
       LEFT JOIN sites s ON g.id = s.group_id AND (s.is_deleted = 0 OR s.is_deleted IS NULL)
+      WHERE (g.is_deleted = 0 OR g.is_deleted IS NULL) ${userId !== undefined ? 'AND g.user_id = ?' : ''}
+      ORDER BY g.order_num ASC, s.order_num ASC
     `;
 
-    const params: any[] = [];
-    if (userId !== undefined) {
-      query += ' WHERE g.user_id = ?';
-      params.push(userId);
-    }
-
-    query += ' ORDER BY g.order_num ASC, s.order_num ASC';
-
-    const result = await this.db.prepare(query).bind(...params).all<{
+    const result = await this.db.prepare(query).bind(...(userId !== undefined ? [userId] : [])).all<{
       group_id: number;
       group_name: string;
       group_order: number;
       group_is_public?: number;
+      group_is_protected: number;
       group_created_at: string;
       group_updated_at: string;
       site_id: number | null;
@@ -920,6 +1045,7 @@ export class NavigationAPI {
           name: row.group_name,
           order_num: row.group_order,
           is_public: row.group_is_public,
+          is_protected: row.group_is_protected,
           created_at: row.group_created_at,
           updated_at: row.group_updated_at,
           sites: [],
@@ -1168,8 +1294,9 @@ export class NavigationAPI {
 
   // Get trash sites
   async getTrashSites(userId?: number): Promise<Site[]> {
+    console.log(`[DEBUG] getTrashSites called for userId: ${userId}`);
     let query = `
-      SELECT s.id, s.group_id, s.name, s.url, s.icon, s.description, s.notes, s.order_num, s.created_at, s.updated_at, s.deleted_at 
+      SELECT s.*
       FROM sites s
       JOIN groups g ON s.group_id = g.id
       WHERE s.is_deleted = 1
@@ -1183,8 +1310,14 @@ export class NavigationAPI {
 
     query += ' ORDER BY s.deleted_at DESC';
 
-    const result = await this.db.prepare(query).bind(...params).all<Site>();
-    return result.results || [];
+    try {
+      const result = await this.db.prepare(query).bind(...params).all<Site>();
+      console.log(`[DEBUG] getTrashSites result count: ${result.results?.length}`);
+      return result.results || [];
+    } catch (error) {
+      console.error('[ERROR] getTrashSites failed:', error);
+      return [];
+    }
   }
 
   // 配置相关API
@@ -1479,23 +1612,19 @@ export class NavigationAPI {
   }
 
   /**
-   * 清空所有数据 (分组和站点)
+   * 清空当前用户的所有数据 (分组和站点)
    * 利用外键级联删除 (ON DELETE CASCADE)
    */
-  async clearAllData(): Promise<boolean> {
+  async clearAllData(userId: number): Promise<boolean> {
     try {
-      // 1. 删除所有分组 (会触发表定义中的 ON DELETE CASCADE 级联删除 sites)
-      await this.db.prepare('DELETE FROM groups').run();
+      // 1. 删除当前用户的所有分组 (会触发表定义中的 ON DELETE CASCADE 级联删除 sites)
+      await this.db.prepare('DELETE FROM groups WHERE user_id = ?').bind(userId).run();
 
-      // 2. 也是为了确保 ID 计数器重置（可选，但推荐）
-      // 注意：D1 不支持 TRUNCATE，通常 DELETE 后会自动处理，或者可以执行：
-      // await this.db.prepare("DELETE FROM sqlite_sequence WHERE name='groups' OR name='sites'").run();
-
-      // 3. 重新插入默认数据，防止页面完全空白
+      // 2. 重新插入默认数据 for this user，防止页面完全空白
       // 这里我们复用 initDB 的逻辑部分，或者手动插入一个
       await this.db.prepare(
-        "INSERT INTO groups (name, order_num, is_public, user_id) VALUES ('常用工具', 1, 1, 1)"
-      ).run();
+        "INSERT INTO groups (name, order_num, is_public, user_id) VALUES ('常用工具', 1, 1, ?)"
+      ).bind(userId).run();
 
       return true;
     } catch (error) {
@@ -1508,10 +1637,10 @@ export class NavigationAPI {
    * 批量更新所有站点的图标为统一 API 格式
    * 格式: https://www.faviconextractor.com/favicon/{domain}
    */
-  async batchUpdateIcons(): Promise<{ success: boolean; count: number }> {
+  async batchUpdateIcons(userId?: number): Promise<{ success: boolean; count: number }> {
     try {
-      // 1. 获取所有站点
-      const sites = await this.getSites();
+      // 1. 获取该用户的所有站点
+      const sites = await this.getSites(undefined, userId);
       let updatedCount = 0;
 
       // 提取域名的简单逻辑 (避免在 Worker 环境依赖外部库)

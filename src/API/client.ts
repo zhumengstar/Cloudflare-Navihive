@@ -256,6 +256,24 @@ export class NavigationClient {
     return response.success;
   }
 
+  async restoreGroup(id: number): Promise<Group | null> {
+    const response = await this.request(`groups/${id}/restore`, {
+      method: 'POST',
+    });
+    return response;
+  }
+
+  async deleteGroupPermanently(id: number): Promise<boolean> {
+    const response = await this.request(`groups/${id}/permanent`, {
+      method: 'DELETE',
+    });
+    return response.success;
+  }
+
+  async getTrashGroups(): Promise<Group[]> {
+    return this.request('groups/trash');
+  }
+
   // 网站相关API
   async getSites(groupId?: number): Promise<Site[]> {
     const endpoint = groupId ? `sites?groupId=${groupId}` : 'sites';

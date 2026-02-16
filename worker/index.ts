@@ -343,7 +343,7 @@ function createResponse(
 }
 
 export default {
-    async fetch(request: Request, env: Env) {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
         const url = new URL(request.url);
 
         // 处理 CORS 预检请求
@@ -807,17 +807,28 @@ export default {
                     // 根据认证状态过滤查询
                     let query = 'SELECT * FROM groups';
                     const params: number[] = [];
+                    const conditions: string[] = [];
+
+                    // 默认排除已删除的分组
+                    conditions.push('(is_deleted = 0 OR is_deleted IS NULL)');
 
                     if (!isAuthenticated) {
                         // 未认证用户只能看到公开分组
-                        query += ' WHERE is_public = ?';
+                        conditions.push('is_public = ?');
                         params.push(1);
+                    }
+
+                    if (conditions.length > 0) {
+                        query += ' WHERE ' + conditions.join(' AND ');
                     }
 
                     query += ' ORDER BY order_num ASC';
 
                     const result = await env.DB.prepare(query).bind(...params).all();
                     return createJsonResponse(result.results || [], request);
+                } else if (path === "groups/trash" && method === "GET") {
+                    const result = await api.getTrashGroups(currentUserId);
+                    return createJsonResponse(result, request);
                 } else if (path.startsWith("groups/") && method === "GET") {
                     const idStr = path.split("/")[1];
                     if (!idStr) {
@@ -887,6 +898,7 @@ export default {
                     const result = await api.updateGroup(id, data);
                     return createJsonResponse(result, request);
                 } else if (path.startsWith("groups/") && method === "DELETE") {
+                    // DELETE /groups/:id 现在执行软删除
                     const idStr = path.split("/")[1];
                     if (!idStr) {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
@@ -896,8 +908,46 @@ export default {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
                     }
 
-                    const result = await api.deleteGroup(id);
+                    const result = await api.softDeleteGroup(id);
                     return createJsonResponse({ success: result }, request);
+
+                } else if (path.startsWith("groups/") && path.endsWith("/restore") && method === "POST") {
+                    // POST /groups/:id/restore 恢复分组
+                    const parts = path.split("/");
+                    // /groups/123/restore
+                    if (parts.length < 3) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const idStr = parts[1];
+                    const id = parseInt(idStr);
+                    if (isNaN(id)) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+
+                    const result = await api.restoreGroup(id);
+                    if (!result) {
+                        return createJsonResponse({ error: "恢复失败或分组不存在" }, request, { status: 404 });
+                    }
+                    return createJsonResponse(result, request);
+
+                } else if (path.startsWith("groups/") && path.endsWith("/permanent") && method === "DELETE") {
+                    // DELETE /groups/:id/permanent 彻底删除
+                    const parts = path.split("/");
+                    if (parts.length < 3) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+                    const idStr = parts[1];
+                    const id = parseInt(idStr);
+                    if (isNaN(id)) {
+                        return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
+                    }
+
+                    const result = await api.deleteGroupPermanently(id);
+                    return createJsonResponse({ success: result }, request);
+                } else if (path === "groups/trash" && method === "GET") {
+                    // GET /groups/trash 获取回收站分组
+                    const groups = await api.getTrashGroups(currentUserId);
+                    return createJsonResponse(groups, request);
                 }
                 // 站点相关API
                 else if (path === "sites" && method === "GET") {
@@ -1322,11 +1372,11 @@ export default {
 
                 // 清空所有数据路由
                 else if (path === "clear-all" && method === "DELETE") {
-                    if (!isAuthenticated) {
+                    if (!isAuthenticated || !currentUserId) {
                         return createResponse("未认证", request, { status: 401 });
                     }
 
-                    const success = await api.clearAllData();
+                    const success = await api.clearAllData(currentUserId);
                     return createJsonResponse({ success }, request);
                 }
                 // 获取站点信息 (标题和描述)
@@ -1430,10 +1480,10 @@ export default {
                         return createJsonResponse({ success: false, message: `抓取失败: ${e instanceof Error ? e.message : '未知错误'}` }, request, { status: 500 });
                     }
                 } else if (path === "utils/batch-update-icons" && method === "POST") {
-                    if (!isAuthenticated || (currentUserId !== 1)) {
-                        return createJsonResponse({ success: false, message: "只有管理员可以执行此操作" }, request, { status: 403 });
+                    if (!isAuthenticated || !currentUserId) {
+                        return createJsonResponse({ success: false, message: "请先登录" }, request, { status: 401 });
                     }
-                    const result = await api.batchUpdateIcons();
+                    const result = await api.batchUpdateIcons(currentUserId);
                     return createJsonResponse(result, request);
                 }
 

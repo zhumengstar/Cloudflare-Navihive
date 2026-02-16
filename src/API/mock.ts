@@ -210,10 +210,12 @@ export class MockNavigationClient {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // 根据认证状态过滤分组
+    let filtered = [...mockGroups];
     if (!this.isAuthenticated) {
-      return mockGroups.filter((g) => g.is_public === 1);
+      filtered = filtered.filter((g) => g.is_public === 1);
     }
-    return [...mockGroups];
+    // 过滤已删除的分组
+    return filtered.filter(g => !g.is_deleted);
   }
 
   // 获取随机推荐站点
@@ -255,7 +257,8 @@ export class MockNavigationClient {
       );
     }
 
-    // Filter deleted sites
+    // Filter deleted groups and sites
+    groups = groups.filter(g => !g.is_deleted);
     sites = sites.filter(s => !s.is_deleted);
 
     // 组合分组和站点
@@ -303,6 +306,45 @@ export class MockNavigationClient {
   }
 
   async deleteGroup(id: number): Promise<boolean> {
+    return this.softDeleteGroup(id);
+  }
+
+  async softDeleteGroup(id: number): Promise<boolean> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const index = mockGroups.findIndex((g) => g.id === id);
+    if (index === -1) return false;
+
+    const existing = mockGroups[index];
+    if (existing) {
+      mockGroups[index] = {
+        ...existing,
+        is_deleted: 1,
+        deleted_at: new Date().toISOString()
+      };
+      saveGroupsToStorage();
+    }
+    return true;
+  }
+
+  async restoreGroup(id: number): Promise<Group | null> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const index = mockGroups.findIndex((g) => g.id === id);
+    if (index === -1) return null;
+
+    const existing = mockGroups[index];
+    if (existing) {
+      mockGroups[index] = {
+        ...existing,
+        is_deleted: 0,
+        deleted_at: undefined
+      };
+      saveGroupsToStorage();
+      return mockGroups[index];
+    }
+    return null;
+  }
+
+  async deleteGroupPermanently(id: number): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const index = mockGroups.findIndex((g) => g.id === id);
     if (index === -1) return false;
@@ -310,6 +352,13 @@ export class MockNavigationClient {
     mockGroups.splice(index, 1);
     saveGroupsToStorage();
     return true;
+  }
+
+  async getTrashGroups(): Promise<Group[]> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return mockGroups.filter(g => g.is_deleted === 1).sort((a, b) => {
+      return new Date(b.deleted_at || 0).getTime() - new Date(a.deleted_at || 0).getTime();
+    });
   }
 
   async getSites(groupId?: number): Promise<Site[]> {

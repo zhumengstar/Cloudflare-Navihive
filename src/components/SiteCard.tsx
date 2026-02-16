@@ -161,7 +161,7 @@ const SiteCard = memo(function SiteCard({
             {/* 图标和名称 */}
             <Box display='flex' alignItems='center' mb={1}>
               {!iconError && site.icon ? (
-                <Box position='relative' mr={1.5} width={32} height={32} flexShrink={0}>
+                <Box sx={{ position: 'relative', mr: 1.5, width: 32, height: 32, flexShrink: 0, display: 'flex' }}>
                   <Skeleton
                     variant='rounded'
                     width={32}
@@ -169,9 +169,10 @@ const SiteCard = memo(function SiteCard({
                     sx={{
                       display: !imageLoaded ? 'block' : 'none',
                       position: 'absolute',
+                      borderRadius: 1,
                     }}
                   />
-                  <Fade in={imageLoaded} timeout={500}>
+                  <Fade in={imageLoaded} timeout={300}>
                     <Box
                       component='img'
                       src={site.icon}
@@ -202,6 +203,9 @@ const SiteCard = memo(function SiteCard({
                     border: 1,
                     borderColor: 'primary.main',
                     opacity: 0.8,
+                    flexShrink: 0,
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
                   }}
                 >
                   {fallbackIcon}
@@ -348,7 +352,7 @@ const SiteCard = memo(function SiteCard({
                 {/* 图标和名称 */}
                 <Box display='flex' alignItems='center' mb={1}>
                   {!iconError && site.icon ? (
-                    <Box position='relative' mr={1.5} width={32} height={32} flexShrink={0}>
+                    <Box sx={{ position: 'relative', mr: 1.5, width: 32, height: 32, flexShrink: 0, display: 'flex' }}>
                       <Skeleton
                         variant='rounded'
                         width={32}
@@ -356,9 +360,10 @@ const SiteCard = memo(function SiteCard({
                         sx={{
                           display: !imageLoaded ? 'block' : 'none',
                           position: 'absolute',
+                          borderRadius: 1,
                         }}
                       />
-                      <Fade in={imageLoaded} timeout={500}>
+                      <Fade in={imageLoaded} timeout={300}>
                         <Box
                           component='img'
                           src={site.icon}
@@ -389,6 +394,9 @@ const SiteCard = memo(function SiteCard({
                         border: 1,
                         borderColor: 'primary.main',
                         opacity: 0.8,
+                        flexShrink: 0,
+                        fontSize: '1rem',
+                        fontWeight: 'bold',
                       }}
                     >
                       {fallbackIcon}
