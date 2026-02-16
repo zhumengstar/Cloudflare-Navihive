@@ -27,6 +27,7 @@ import './App.css';
 // 缓存相关的常量和辅助函数
 const CACHE_CONFIG_KEY = 'nav_configs_cache';
 const CACHE_DATA_KEY = 'nav_data_cache';
+const CACHE_PROFILE_KEY = 'nav_profile_cache';
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24小时
 const IMPORT_TASK_KEY = 'navihive_import_task';
 
@@ -130,6 +131,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ViewQuiltIcon from '@mui/icons-material/ViewQuilt';
 import ViewStreamIcon from '@mui/icons-material/ViewStream';
+import RecommendIcon from '@mui/icons-material/Recommend';
 
 // 根据环境选择使用真实API还是模拟API
 // @cloudflare/vite-plugin 在 npm run dev 时自动代理 Worker + 本地 D1
@@ -162,8 +164,8 @@ const DEFAULT_CONFIGS = {
   'site.backgroundOpacity': '0.15', // 背景蒙版透明度
   'site.iconApi': 'https://www.faviconextractor.com/favicon/{domain}', // 默认使用的API接口
   'site.searchBoxEnabled': 'true', // 是否启用搜索框
-  'site.searchBoxGuestEnabled': 'true', // 访客是否可以使用搜索框
   'ui.style': 'modern', // UI风格: 'modern' | 'classic'
+  isAdmin: 'false',
 };
 
 function ScrollTop(props: { children: React.ReactElement; window?: () => Window }) {
@@ -228,6 +230,13 @@ function App() {
 
   // 新增认证状态
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // 使用 ref 追踪 groups 的最新状态，避免 handleExportData 频繁更新导致 UserAvatar 重渲染
+  const groupsRef = useRef<GroupWithSites[]>(groups);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
   const [_isAuthRequired, setIsAuthRequired] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
@@ -603,7 +612,17 @@ function App() {
           setGroups(cachedData);
         }
 
-        // 获取详细用户资料以确定角色
+        // 尝试从缓存加载用户资料 (优先显示)
+        const cachedProfile = loadFromCache(CACHE_PROFILE_KEY);
+        if (cachedProfile) {
+          setUsername(cachedProfile.username);
+          setAvatarUrl(cachedProfile.avatar_url || null);
+          const adminStatus = cachedProfile.role === 'admin';
+          setIsAdmin(adminStatus);
+          setConfigs(prev => ({ ...prev, isAdmin: adminStatus ? 'true' : 'false' }));
+        }
+
+        // 获取详细用户资料以确定角色 (并行更新)
         try {
           const profile = await (api as any).getUserProfile();
           setUsername(profile.username);
@@ -615,6 +634,8 @@ function App() {
             console.log('[Debug] checkAuthStatus - Setting configs:', next);
             return next;
           });
+          // 更新缓存
+          saveToCache(CACHE_PROFILE_KEY, profile);
         } catch (e) {
           console.warn('获取用户资料失败，回退到默认设置:', e);
           setUsername('User');
@@ -659,8 +680,12 @@ function App() {
         try {
           if (loginResponse.userId) {
             const profile = await api.getUserProfile(loginResponse.userId);
-            if (profile && profile.avatar_url) {
-              setAvatarUrl(profile.avatar_url);
+            if (profile) {
+              if (profile.avatar_url) {
+                setAvatarUrl(profile.avatar_url);
+              }
+              // 保存到缓存
+              saveToCache(CACHE_PROFILE_KEY, profile);
             }
           }
         } catch (e) {
@@ -829,6 +854,7 @@ function App() {
     localStorage.removeItem(CACHE_DATA_KEY);
     // await fetchData(); // 不再加载公开数据
     await fetchConfigs(); // 配置可能需要重置（如标题等）
+    localStorage.removeItem(CACHE_PROFILE_KEY); // 清除用户资料缓存
   }, [api, fetchConfigs]);
 
   useEffect(() => {
@@ -1015,7 +1041,8 @@ function App() {
         console.warn(`后台自动补全失败 [${site.url}]:`, err);
       }
     }
-  }, [groups, configs, api]);
+  }, [groups, configs, api, isAdmin]);
+
 
   const fetchData = useCallback(async (silent = false) => {
     try {
@@ -1054,7 +1081,7 @@ function App() {
         scavengeSiteInfo();
       }
     }
-  }, [isAuthenticated, viewMode, api, scavengeSiteInfo, handleError]);
+  }, [isAuthenticated, viewMode, api, scavengeSiteInfo, handleError, isAdmin]);
 
 
 
@@ -1062,20 +1089,62 @@ function App() {
   const handleSiteUpdate = async (updatedSite: Site) => {
     try {
       if (updatedSite.id) {
+        // 查找旧的站点信息以对比变化
+        let oldSite: Site | undefined;
+        let oldGroupId: number | undefined;
+
+        for (const g of groups) {
+          const found = g.sites.find(s => s.id === updatedSite.id);
+          if (found) {
+            oldSite = found;
+            oldGroupId = g.id;
+            break;
+          }
+        }
+
         await api.updateSite(updatedSite.id, updatedSite);
 
         // 局部更新本地状态，避免 fetchData 全量刷新
-        setGroups(prevGroups => prevGroups.map(group => {
-          if (group.id === updatedSite.group_id) {
-            return {
-              ...group,
-              sites: group.sites.map(s => s.id === updatedSite.id ? updatedSite : s)
-            };
+        setGroups(prevGroups => {
+          // 如果分组发生了变化
+          if (oldGroupId !== undefined && oldGroupId !== updatedSite.group_id) {
+            return prevGroups.map(group => {
+              // 从旧分组移除
+              if (group.id === oldGroupId) {
+                return {
+                  ...group,
+                  sites: group.sites.filter(s => s.id !== updatedSite.id)
+                };
+              }
+              // 添加到新分组
+              if (group.id === updatedSite.group_id) {
+                return {
+                  ...group,
+                  sites: [...group.sites, updatedSite]
+                };
+              }
+              return group;
+            });
           }
-          return group;
-        }));
 
-        handleSuccess('书签更新成功');
+          // 如果是在同一个分组内更新
+          return prevGroups.map(group => {
+            if (group.id === updatedSite.group_id) {
+              return {
+                ...group,
+                sites: group.sites.map(s => s.id === updatedSite.id ? updatedSite : s)
+              };
+            }
+            return group;
+          });
+        });
+
+        // 根据变化显示不同的提示
+        if (oldSite && oldSite.is_featured !== updatedSite.is_featured) {
+          handleSuccess(updatedSite.is_featured ? '已成功设为精选' : '已成功取消精选');
+        } else {
+          handleSuccess('书签更新成功');
+        }
 
         // 检查是否需要后台补全
         // 启发式规则：如果名称等于 URL 的域名，且描述为空，则认为是“占位符”状态，尝试补全
@@ -1558,6 +1627,11 @@ function App() {
     setOpenAddGroup(true);
   }, []);
 
+  // 优化：使用 useCallback 避免 UserAvatar 重复渲染
+  const handleAvatarUpdate = useCallback((url: string | null) => {
+    setAvatarUrl(url);
+  }, []);
+
   const handleCloseAddGroup = () => {
     setOpenAddGroup(false);
   };
@@ -1742,9 +1816,11 @@ function App() {
     try {
       setLoading(true);
 
+      const currentGroups = groupsRef.current;
+
       // 提取所有站点数据为单独的数组
       const allSites: Site[] = [];
-      groups.forEach((group) => {
+      currentGroups.forEach((group) => {
         if (group.sites && group.sites.length > 0) {
           allSites.push(...group.sites);
         }
@@ -1752,7 +1828,7 @@ function App() {
 
       const exportData = {
         // 只导出分组基本信息，不包含站点
-        groups: groups.map((group) => ({
+        groups: currentGroups.map((group) => ({
           id: group.id,
           name: group.name,
           order_num: group.order_num,
@@ -1781,7 +1857,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [groups, configs]);
+  }, [configs]); // 移除 groups 依赖，现在使用 groupsRef
 
   // 处理导入对话框
   const handleOpenImport = useCallback(() => {
@@ -2219,7 +2295,7 @@ function App() {
   };
 
   // 批量更新精选状态
-  const handleBatchFeaturedUpdate = async (siteIds: number[], isFeatured: number) => {
+  const handleBatchFeaturedUpdate = useCallback(async (siteIds: number[], isFeatured: number) => {
     try {
       if (!siteIds.length) return;
 
@@ -2245,7 +2321,7 @@ function App() {
       console.error('批量更新精选失败:', error);
       handleError('批量更新精选失败: ' + (error as Error).message);
     }
-  };
+  }, [api, handleError]);
 
   // 批量删除站点
   const handleBatchDeleteSites = async (siteIds: number[]) => {
@@ -2582,7 +2658,7 @@ function App() {
                         onResetData={handleOpenResetData}
                         api={api}
                         avatarUrl={avatarUrl}
-                        onAvatarUpdate={(url: string | null) => setAvatarUrl(url)}
+                        onAvatarUpdate={handleAvatarUpdate}
                       />
                     </Suspense>
                   )}
@@ -2607,7 +2683,6 @@ function App() {
                         console.log('[Debug] App Render - isAdmin:', isAdmin, 'configs.isAdmin:', configs.isAdmin);
                         const searchBoxEnabled = configs['site.searchBoxEnabled'] === 'true';
                         if (!searchBoxEnabled) return null;
-                        if (viewMode === 'readonly' && configs['site.searchBoxGuestEnabled'] !== 'true') return null;
 
                         return (
                           <Box sx={{ mb: 4, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
@@ -2645,7 +2720,7 @@ function App() {
                                       '&:hover': { bgcolor: showFeaturedOnly ? 'secondary.dark' : 'action.hover' }
                                     }}
                                   >
-                                    <ViewQuiltIcon />
+                                    <RecommendIcon />
                                   </IconButton>
                                 </Tooltip>
                               )}
@@ -2730,6 +2805,8 @@ function App() {
                                       configs={configs}
                                       draggedSiteId={draggedSiteId}
                                       globalToggleVersion={globalToggleVersion}
+                                      onBatchFeaturedUpdate={handleBatchFeaturedUpdate}
+                                      isAdmin={isAdmin}
                                     />
                                   ))}
                                   {displayGroups.length > visibleGroupsCount && (
@@ -3132,31 +3209,6 @@ function App() {
                           </Box>
                         }
                       />
-                      {tempConfigs['site.searchBoxEnabled'] === 'true' && (
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={tempConfigs['site.searchBoxGuestEnabled'] === 'true'}
-                              onChange={(e) =>
-                                setTempConfigs({
-                                  ...tempConfigs,
-                                  'site.searchBoxGuestEnabled': e.target.checked ? 'true' : 'false',
-                                })
-                              }
-                              color='primary'
-                            />
-                          }
-                          label={
-                            <Box>
-                              <Typography variant='body1'>访客可用搜索框</Typography>
-                              <Typography variant='caption' color='text.secondary'>
-                                允许未登录的访客使用搜索功能
-                              </Typography>
-                            </Box>
-                          }
-                          sx={{ ml: 4, mt: 1 }}
-                        />
-                      )}
                     </Box>
                     <TextField
                       margin='dense'

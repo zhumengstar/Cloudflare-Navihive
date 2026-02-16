@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import RecommendIcon from '@mui/icons-material/Recommend';
 
 interface SiteCardProps {
   site: Site;
@@ -37,7 +38,7 @@ interface SiteCardProps {
 // 使用memo包装组件以减少不必要的重渲染
 const SiteCard = memo(function SiteCard({
   site,
-  // onUpdate,
+  onUpdate,
   // onDelete,
   onSiteClick,
   isEditMode = false,
@@ -527,8 +528,39 @@ const SiteCard = memo(function SiteCard({
             )}
           </>
         )}
+
+        {/* 精选标识 - 右下角 */}
+        {site.is_featured === 1 && (
+          <Box
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onUpdate && site.id) {
+                onUpdate({ ...site, is_featured: 0 });
+              }
+            }}
+            sx={{
+              position: 'absolute',
+              bottom: 6,
+              right: 6,
+              zIndex: 2,
+              color: 'warning.main', // 使用警告色(橙色)作为精选标识
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))',
+              opacity: 0.9,
+              transition: 'transform 0.2s',
+              '&:hover': {
+                transform: 'scale(1.2)',
+              },
+            }}
+          >
+            <RecommendIcon fontSize="small" />
+          </Box>
+        )}
       </Card>
-    </Box>
+    </Box >
   );
 
   if (isEditMode) {

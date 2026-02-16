@@ -148,7 +148,17 @@ export class NavigationClient {
     }
 
     if (!response.ok) {
-      throw new Error(`API错误: ${response.status}`);
+      let errorMessage = `API错误: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (e) {
+        // 无法解析 JSON，使用默认错误信息
+      }
+      console.error('[Client Debug] Backend returned error:', errorMessage);
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

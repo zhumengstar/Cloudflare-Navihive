@@ -79,6 +79,7 @@ export interface GroupWithSites extends Group {
 export interface Config {
   key: string;
   value: string;
+  user_id?: number; // Config owner
   created_at?: string;
   updated_at?: string;
 }
@@ -1048,7 +1049,7 @@ export class NavigationAPI {
   // 网站相关 API
   async getSites(groupId?: number): Promise<Site[]> {
     let query =
-      'SELECT id, group_id, name, url, icon, description, notes, order_num, last_clicked_at, created_at, updated_at FROM sites WHERE (is_deleted = 0 OR is_deleted IS NULL)';
+      'SELECT id, group_id, name, url, icon, description, notes, order_num, is_public, is_featured, last_clicked_at, created_at, updated_at FROM sites WHERE (is_deleted = 0 OR is_deleted IS NULL)';
     const params: (string | number)[] = [];
 
     if (groupId !== undefined) {
@@ -1091,7 +1092,8 @@ export class NavigationAPI {
         s.is_public as site_is_public,
         s.last_clicked_at as site_last_clicked_at,
         s.created_at as site_created_at,
-        s.updated_at as site_updated_at
+        s.updated_at as site_updated_at,
+        s.is_featured as site_is_featured
       FROM groups g
       LEFT JOIN sites s ON g.id = s.group_id AND (s.is_deleted = 0 OR s.is_deleted IS NULL)
       WHERE (g.is_deleted = 0 OR g.is_deleted IS NULL) ${userId !== undefined ? 'AND g.user_id = ?' : ''}
@@ -1114,6 +1116,7 @@ export class NavigationAPI {
       site_notes: string | null;
       site_order: number | null;
       site_is_public?: number;
+      site_is_featured?: number;
       site_last_clicked_at: string | null;
       site_created_at: string | null;
       site_updated_at: string | null;
@@ -1148,6 +1151,7 @@ export class NavigationAPI {
           icon: row.site_icon || '',
           description: row.site_description || '',
           notes: row.site_notes || '',
+          is_featured: row.site_is_featured || 0,
           order_num: row.site_order!,
           is_public: row.site_is_public,
           last_clicked_at: row.site_last_clicked_at || undefined,
@@ -1231,7 +1235,7 @@ export class NavigationAPI {
   async getSite(id: number): Promise<Site | null> {
     const result = await this.db
       .prepare(
-        'SELECT id, group_id, name, url, icon, description, notes, order_num, last_clicked_at, created_at, updated_at FROM sites WHERE id = ?'
+        'SELECT id, group_id, name, url, icon, description, notes, order_num, is_public, is_featured, last_clicked_at, created_at, updated_at FROM sites WHERE id = ?'
       )
       .bind(id)
       .first<Site>();
@@ -1298,6 +1302,7 @@ export class NavigationAPI {
       'notes',
       'order_num',
       'is_public',
+      'is_featured',
     ] as const;
     type AllowedField = (typeof ALLOWED_FIELDS)[number];
 
@@ -1407,8 +1412,10 @@ export class NavigationAPI {
 
   // 配置相关API
   async getConfigs(userId: number = 1): Promise<Record<string, string>> {
+    // 获取全局配置(1)和当前用户配置(userId)
+    // 按 user_id 升序排序，这样后续的用户配置会覆盖全局配置
     const result = await this.db
-      .prepare('SELECT key, value FROM configs WHERE user_id = ?')
+      .prepare('SELECT key, value, user_id FROM configs WHERE user_id = 1 OR user_id = ? ORDER BY user_id ASC')
       .bind(userId)
       .all<Config>();
 
@@ -1735,32 +1742,45 @@ export class NavigationAPI {
     try {
       if (!ids.length) return { success: true, message: '没有选中的站点', count: 0 };
 
+      const keys = Object.keys(data);
+      if (keys.length === 0) return { success: true, message: '没有需要更新的内容', count: 0 };
+
+      // Generate base update parts
       const updates: string[] = [];
-      const values: any[] = [];
-      let i = 1;
+      const baseValues: any[] = [];
 
       for (const [key, value] of Object.entries(data)) {
         if (value !== undefined) {
-          updates.push(`${key} = $${i++}`);
-          values.push(value);
+          updates.push(`${key} = ?`);
+          baseValues.push(value);
         }
       }
-
-      if (updates.length === 0) {
-        return { success: true, message: '没有需要更新的内容', count: 0 };
-      }
-
       updates.push(`updated_at = CURRENT_TIMESTAMP`);
 
-      const query = `UPDATE sites SET ${updates.join(', ')} WHERE id IN (${ids.join(', ')})`;
-      const result = await this.db.prepare(query).bind(...values).run();
+      const updateClause = updates.join(', ');
+      const query = `UPDATE sites SET ${updateClause} WHERE id = ?`;
 
-      if (!result.success) throw new Error('批量更新失败');
+      // Create individual statements for each ID
+      const stmts = ids.map(id => {
+        // Values for this specific statement: base values + current ID
+        return this.db.prepare(query).bind(...baseValues, id);
+      });
+
+      console.log(`[Worker Debug] Batch updating ${stmts.length} sites with query: ${query}`);
+
+      // Execute as a batch
+      const results = await this.db.batch(stmts);
+
+      // Check results
+      const success = results.every(r => r.success);
+      if (!success) {
+        throw new Error('部分或全部更新失败');
+      }
 
       return { success: true, message: '批量更新成功', count: ids.length };
     } catch (error) {
       console.error('Failed to batch update sites:', error);
-      return { success: false, message: '批量更新失败', count: 0 };
+      return { success: false, message: '批量更新失败: ' + (error instanceof Error ? error.message : String(error)), count: 0 };
     }
   }
 

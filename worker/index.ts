@@ -345,6 +345,7 @@ function createResponse(
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext) {
         const url = new URL(request.url);
+        console.log(`[Worker Entry] ${request.method} ${url.pathname}`);
 
         // 处理 CORS 预检请求
         if (request.method === 'OPTIONS') {
@@ -628,6 +629,16 @@ export default {
                         return createResponse("数据库已经初始化过，无需重复初始化", request, { status: 200 });
                     }
                     return createResponse("数据库初始化成功", request, { status: 200 });
+                }
+
+                // DATA DEBUG ENDPOINT (Public)
+                if (path === "debug/schema" && method === "GET") {
+                    try {
+                        const result = await env.DB.prepare("PRAGMA table_info(sites)").all();
+                        return createJsonResponse(result.results, request);
+                    } catch (error) {
+                        return createJsonResponse({ error: String(error) }, request, { status: 500 });
+                    }
                 }
 
                 // 验证中间件 - 条件认证
@@ -1082,7 +1093,7 @@ export default {
 
                     const result = await api.createSite(validation.sanitizedData as Site);
                     return createJsonResponse(result, request);
-                } else if (path.startsWith("sites/") && method === "PUT") {
+                } else if (path.startsWith("sites/") && method === "PUT" && path !== "sites/batch") {
                     const idStr = path.split("/")[1];
                     if (!idStr) {
                         return createJsonResponse({ error: "无效的ID" }, request, { status: 400 });
@@ -1308,8 +1319,8 @@ export default {
                     const value = await api.getConfig(key, currentUserId);
                     return createJsonResponse({ key, value }, request);
                 } else if (path.startsWith("configs/") && method === "PUT") {
-                    if (!isAuthenticated || (currentUserId !== 1)) {
-                        return createJsonResponse({ success: false, message: "只有管理员有权修改配置" }, request, { status: 403 });
+                    if (!isAuthenticated) {
+                        return createJsonResponse({ success: false, message: "请先登录" }, request, { status: 401 });
                     }
                     const key = path.substring("configs/".length);
                     const data = (await validateRequestBody(request)) as ConfigInput;
@@ -1395,7 +1406,6 @@ export default {
                     if (!isAuthenticated || !currentUserId) {
                         return createResponse("未认证", request, { status: 401 });
                     }
-
                     try {
                         console.log('[Worker GET Profile] ID:', currentUserId);
                         const profile = await api.getUserProfile(currentUserId);
@@ -1403,6 +1413,16 @@ export default {
                         return createJsonResponse(profile, request);
                     } catch (error) {
                         return createJsonResponse({ success: false, message: "获取资料失败" }, request, { status: 500 });
+                    }
+                }
+
+                // DATA DEBUG ENDPOINT
+                else if (path === "debug/schema" && method === "GET") {
+                    try {
+                        const result = await env.DB.prepare("PRAGMA table_info(sites)").all();
+                        return createJsonResponse(result.results, request);
+                    } catch (error) {
+                        return createJsonResponse({ error: String(error) }, request, { status: 500 });
                     }
                 }
 
@@ -1533,20 +1553,29 @@ export default {
                         return createJsonResponse({ success: false, message: "请先登录" }, request, { status: 401 });
                     }
                     try {
-                        const data = await validateRequestBody(request) as { ids: number[], data: Partial<Site> };
+                        const payload = await validateRequestBody(request);
+                        console.log('[Worker Debug] sites/batch payload:', JSON.stringify(payload));
+                        const data = payload as { ids: number[], data: Partial<Site> };
                         if (!data.ids || !Array.isArray(data.ids)) {
                             return createJsonResponse({ success: false, message: "参数 ids 必须是数组" }, request, { status: 400 });
                         }
                         const result = await api.batchUpdateSites(data.ids, data.data);
                         return createJsonResponse(result, request);
                     } catch (error) {
-                        return createJsonResponse({ success: false, message: "批量更新请求无效" }, request, { status: 400 });
+                        console.error('Batch update failed:', error);
+                        return createJsonResponse({ success: false, message: "批量更新请求无效: " + (error instanceof Error ? error.message : String(error)) }, request, { status: 400 });
                     }
                 }
 
 
+                else {
+                    console.warn(`[Worker Warning] Unhandled API route: ${method} ${path}`);
+                    // return createJsonResponse({ error: "Route not found" }, request, { status: 404 });
+                    // Fallthrough to existing logic if any
+                }
+
                 // AI 智能问答路由
-                else if (path === "chat" && method === "POST") {
+                if (path === "chat" && method === "POST") {
                     // 模型配置 - 切换模型时只需修改这里
                     const AI_MODEL = {
                         name: '@cf/zai-org/glm-4.7-flash' as keyof AiModels,

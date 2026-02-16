@@ -98,6 +98,7 @@ interface GroupCardProps {
   onSiteClick?: (siteId: number) => void; // 新增：站点点击回调
   onSettingsOpen?: (siteId: number) => Promise<void> | void; // 新增：打开设置回调
   globalToggleVersion?: { type: 'expand' | 'collapse'; ts: number }; // 新增：全局切换指令
+  isAdmin?: boolean; // 新增：明确的管理员标志
 }
 
 const GroupCard: React.FC<GroupCardProps> = React.memo(({
@@ -118,6 +119,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
   onBatchFeaturedUpdate,
   globalToggleVersion,
   index, // 解构 index
+  isAdmin, // 解构 isAdmin
 }) => {
   // 添加编辑弹窗的状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -483,7 +485,7 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
                     >
                       删除选中 ({selectedSiteIds.size})
                     </Button>
-                    {configs?.isAdmin === 'true' && (
+                    {(isAdmin || configs?.isAdmin === 'true') && (
                       <>
                         <Button
                           variant='contained'
@@ -575,18 +577,20 @@ const GroupCard: React.FC<GroupCardProps> = React.memo(({
       </Collapse>
 
       {/* 编辑分组弹窗 */}
-      {onUpdateGroup && onDeleteGroup && (
-        <EditGroupDialog
-          open={editDialogOpen}
-          group={group}
-          onClose={() => setEditDialogOpen(false)}
-          onSave={handleUpdateGroup}
-          onDelete={handleDeleteGroup}
-        />
-      )}
+      {
+        onUpdateGroup && onDeleteGroup && (
+          <EditGroupDialog
+            open={editDialogOpen}
+            group={group}
+            onClose={() => setEditDialogOpen(false)}
+            onSave={handleUpdateGroup}
+            onDelete={handleDeleteGroup}
+          />
+        )
+      }
 
 
-    </Paper>
+    </Paper >
   );
 });
 

@@ -99,15 +99,64 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     const [changePwdError, setChangePwdError] = useState<string | null>(null);
     const [changePwdSuccess, setChangePwdSuccess] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string>('');
-    const [avatarUrl, setLocalAvatarUrl] = useState<string | null>(propAvatarUrl || null);
     const [infoLoading, setInfoLoading] = useState(false);
 
-    // 同步外部属性到内部状态
+    // 优先从缓存读取头像
+    const getCachedAvatar = () => {
+        try {
+            const cached = localStorage.getItem('nav_profile_cache');
+            if (cached) {
+                const data = JSON.parse(cached);
+                // 简单的过期检查 (虽然主要依赖 App.tsx 的 checkAuthStatus，这里作为 fallback)
+                if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+                    return data.avatar_url;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to read profile cache', e);
+        }
+        return null;
+    };
+
+    const [avatarUrl, setLocalAvatarUrl] = useState<string | null>(propAvatarUrl || getCachedAvatar() || null);
+
+    // 同步外部属性到内部状态，如果外部有更新则覆盖
     React.useEffect(() => {
         if (propAvatarUrl !== undefined) {
             setLocalAvatarUrl(propAvatarUrl);
         }
     }, [propAvatarUrl]);
+
+    // 组件挂载时，后台静默刷新头像并更新缓存
+    React.useEffect(() => {
+        const refreshProfile = async () => {
+            if (!api.getUserProfile) return;
+            try {
+                const profile = await api.getUserProfile();
+                if (profile && profile.avatar_url) {
+                    // 如果头像有变化，更新状态和缓存
+                    if (profile.avatar_url !== avatarUrl) {
+                        setLocalAvatarUrl(profile.avatar_url);
+                        onAvatarUpdate?.(profile.avatar_url);
+                    }
+                    // 更新缓存（即使 URL 没变也要更新时间戳等）
+                    const cacheData = {
+                        username: profile.username,
+                        avatar_url: profile.avatar_url,
+                        isAdmin: profile.role === 'admin' || profile.role === 'root', // 假设 role 字段存在
+                        timestamp: Date.now()
+                    };
+                    localStorage.setItem('nav_profile_cache', JSON.stringify(cacheData));
+                }
+            } catch (error) {
+                console.error("Silent profile refresh failed:", error);
+            }
+        };
+
+        // 延迟一点执行，避免阻塞主线程渲染
+        const timer = setTimeout(refreshProfile, 1000);
+        return () => clearTimeout(timer);
+    }, [api, onAvatarUpdate]); // 依赖项尽量少，避免频繁触发
     const [isEditingEmail, setIsEditingEmail] = useState(false);
     const [editEmail, setEditEmail] = useState('');
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
@@ -135,6 +184,15 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 if (profile.avatar_url) {
                     setLocalAvatarUrl(profile.avatar_url);
                     onAvatarUpdate?.(profile.avatar_url);
+
+                    // 更新缓存
+                    const cacheData = {
+                        username: profile.username,
+                        avatar_url: profile.avatar_url,
+                        isAdmin: profile.role === 'admin',
+                        timestamp: Date.now()
+                    };
+                    localStorage.setItem('nav_profile_cache', JSON.stringify(cacheData));
                 }
             }
         } catch (error) {
@@ -427,14 +485,12 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                     </ListItemIcon>
                     <ListItemText>书签拖动</ListItemText>
                 </MenuItem>
-                {isAdmin && (
-                    <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }} sx={menuItemSx}>
-                        <ListItemIcon>
-                            <SettingsIcon fontSize='small' />
-                        </ListItemIcon>
-                        <ListItemText>网站设置</ListItemText>
-                    </MenuItem>
-                )}
+                <MenuItem onClick={() => { handleMenuClose(); onOpenConfig(); }} sx={menuItemSx}>
+                    <ListItemIcon>
+                        <SettingsIcon fontSize='small' />
+                    </ListItemIcon>
+                    <ListItemText>网站设置</ListItemText>
+                </MenuItem>
                 <Divider />
                 <MenuItem onClick={() => { handleMenuClose(); onExportData(); }} sx={menuItemSx}>
                     <ListItemIcon>
@@ -659,7 +715,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                                 </ListItemIcon>
                                 <ListItemText
                                     primary='账号状态'
-                                    secondary={isAdmin ? '管理员' : '普通用'}
+                                    secondary={isAdmin ? '管理员' : '普通用户'}
                                     primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
                                 />
                                 <Chip label='已登录' color='success' size='small' variant='outlined' />
